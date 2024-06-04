@@ -1,0 +1,458 @@
+[
+    {
+        "name": "ComputerInfo",
+        "columns": [
+            {
+                "name": "CsName",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "CsDNSHostName",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "CsDomain",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "CsManufacturer",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "CsModel",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "CsPartOfDomain",
+                "type": "BOOLEAN"
+            },
+            {
+                "name": "CsPCSystemType",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "OsName",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "OsType",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "OsVersion",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "OsSystemDrive",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "OsLastBootUpTime",
+                "type": "TIMESTAMP"
+            }
+        ]
+    },
+    {
+        "name": "DiskVolumes",
+        "columns": [
+            {
+                "name": "UniqueId",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "DriveLetter",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "DriveType",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Size",
+                "type": "BIGINT"
+            },
+            {
+                "name": "FileSystemLabel",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "FileSystem",
+                "type": "VARCHAR(255)"
+            }
+        ]
+    },
+    {
+        "name": "NetAdapters",
+        "columns": [
+            {
+                "name": "MacAddress",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Status",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "PhysicalMediaType",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "InterfaceIndex",
+                "type": "INTEGER"
+            },
+            {
+                "name": "Name",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "InterfaceDescription",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "ConnectionSpecificSuffix",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "RegisterThisConnectionsAddress",
+                "type": "BOOLEAN"
+            }
+        ]
+    },
+    {
+        "name": "IPAddresses",
+        "columns": [
+            {
+                "name": "InterfaceIndex",
+                "type": "INTEGER"
+            },
+            {
+                "name": "IPAddress",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "PrefixLength",
+                "type": "INTEGER"
+            },
+            {
+                "name": "AddressFamily",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Type",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "SkipAsSource",
+                "type": "BOOLEAN"
+            },
+            {
+                "name": "ValidLifetimeTicks",
+                "type": "BIGINT"
+            }
+        ]
+    },
+    {
+        "name": "DnsServers",
+        "columns": [
+            {
+                "name": "InterfaceIndex",
+                "type": "INTEGER"
+            },
+            {
+                "name": "ServerAddress",
+                "type": "VARCHAR(255)"
+            }
+        ]
+    },
+    {
+        "name": "DnsSearchSuffixes",
+        "columns": [
+            {
+                "name": "InterfaceIndex",
+                "type": "INTEGER"
+            },
+            {
+                "name": "SuffixSearch",
+                "type": "VARCHAR(255)"
+            }
+        ]
+    },
+    {
+        "name": "ArpCache",
+        "columns": [
+            {
+                "name": "InterfaceIndex",
+                "type": "INTEGER"
+            },
+            {
+                "name": "IPAddress",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "LinkLayerAddress",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "State",
+                "type": "VARCHAR(255)"
+            }
+        ]
+    },
+    {
+        "name": "Routes",
+        "columns": [
+            {
+                "name": "InterfaceIndex",
+                "type": "INTEGER"
+            },
+            {
+                "name": "DestinationPrefix",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "NextHop",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "RouteMetric",
+                "type": "INTEGER"
+            }
+        ]
+    },
+    {
+        "name": "TcpConnections",
+        "columns": [
+            {
+                "name": "LocalAddress",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "LocalPort",
+                "type": "INTEGER"
+            },
+            {
+                "name": "RemoteAddress",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "RemotePort",
+                "type": "INTEGER"
+            },
+            {
+                "name": "OwningProcess",
+                "type": "INTEGER"
+            },
+            {
+                "name": "CreationTime",
+                "type": "TIMESTAMP"
+            },
+            {
+                "name": "State",
+                "type": "VARCHAR(255)"
+            }
+        ]
+    },
+    {
+        "name": "UdpConnections",
+        "columns": [
+            {
+                "name": "LocalAddress",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "LocalPort",
+                "type": "INTEGER"
+            },
+            {
+                "name": "RemoteAddress",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "RemotePort",
+                "type": "INTEGER"
+            },
+            {
+                "name": "OwningProcess",
+                "type": "INTEGER"
+            },
+            {
+                "name": "CreationTime",
+                "type": "TIMESTAMP"
+            }
+        ]
+    },
+    {
+        "name": "Processes",
+        "columns": [
+            {
+                "name": "ProcessName",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "UserName",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "CreationDate",
+                "type": "TIMESTAMP"
+            },
+            {
+                "name": "ParentProcessId",
+                "type": "INTEGER"
+            },
+            {
+                "name": "ProcessId",
+                "type": "INTEGER"
+            },
+            {
+                "name": "CommandLine",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "ExecutablePath",
+                "type": "VARCHAR(255)"
+            }
+        ]
+    },
+    {
+        "name": "Users",
+        "columns": [
+            {
+                "name": "Name",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Enabled",
+                "type": "BOOLEAN"
+            },
+            {
+                "name": "LastLogon",
+                "type": "TIMESTAMP"
+            },
+            {
+                "name": "PasswordLastSet",
+                "type": "TIMESTAMP"
+            },
+            {
+                "name": "PrincipalSource",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "SID",
+                "type": "VARCHAR(255)"
+            }
+        ]
+    },
+    {
+        "name": "Groups",
+        "columns": [
+            {
+                "name": "Name",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "SID",
+                "type": "VARCHAR(255)"
+            }
+        ]
+    },
+    {
+        "name": "Members",
+        "columns": [
+            {
+                "name": "UserSID",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "GroupSID",
+                "type": "VARCHAR(255)"
+            }
+        ]
+    },
+    {
+        "name": "Shares",
+        "columns": [
+            {
+                "name": "Name",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Path",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "ScopeName",
+                "type": "VARCHAR(255)"
+            }
+        ]
+    },
+    {
+        "name": "Autorunsc",
+        "columns": [
+            {
+                "name": "Entry Location",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Entry",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Enabled",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Category",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Profile",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Signer",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Company",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Image Path",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Version",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "Launch String",
+                "type": "VARCHAR(2047)"
+            },
+            {
+                "name": "MD5",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "SHA-1",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "PE-SHA1",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "PESHA-256",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "SHA-256",
+                "type": "VARCHAR(255)"
+            },
+            {
+                "name": "IMP",
+                "type": "VARCHAR(255)"
+            }
+        ]
+    }
+]

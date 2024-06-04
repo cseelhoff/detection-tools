@@ -326,3 +326,39 @@ foreach ($result in $results) {
 
 $connection.Close()
 Write-Host "Data inserted into database"
+
+<#
+WITH 
+latest_timestamps AS (
+    SELECT systemuuid, MAX(time) AS max_time
+    FROM systemsnapshots
+    GROUP BY systemuuid
+),
+oldest_timestamps AS (
+    SELECT systemuuid, MIN(time) AS min_time
+    FROM systemsnapshots
+    WHERE (systemuuid, time) NOT IN (SELECT systemuuid, max_time FROM latest_timestamps)
+    GROUP BY systemuuid
+),
+latest_entries AS (
+    SELECT *
+    FROM autorunsc
+    WHERE (systemuuid, time) IN (SELECT systemuuid, max_time FROM latest_timestamps)
+),
+oldest_entries AS (
+    SELECT *
+    FROM autorunsc
+    WHERE (systemuuid, time) IN (SELECT systemuuid, min_time FROM oldest_timestamps)
+)
+SELECT latest_entries.*
+FROM latest_entries
+LEFT JOIN oldest_entries
+ON latest_entries.launchstring = oldest_entries.launchstring AND latest_entries.md5 = oldest_entries.md5 AND latest_entries.systemuuid = oldest_entries.systemuuid
+WHERE oldest_entries.systemuuid IS NULL
+UNION
+SELECT oldest_entries.*
+FROM oldest_entries
+LEFT JOIN latest_entries
+ON latest_entries.launchstring = oldest_entries.launchstring AND latest_entries.md5 = oldest_entries.md5 AND latest_entries.systemuuid = oldest_entries.systemuuid
+WHERE latest_entries.systemuuid IS NULL;
+#>
