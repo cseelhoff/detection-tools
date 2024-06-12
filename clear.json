@@ -1,0 +1,58 @@
+{
+    "endpoints": [
+        {
+            "name": "endpoint1",
+            "credentials": "credential1",
+            "actions": [
+                {
+                    "type": "kill-process",
+                    "process_id": "1234"
+                },
+                {
+                    "type": "delete-file",
+                    "path": "C:\\path\\to\\file.txt"
+                },
+                {
+                    "type": "remove-persistence",
+                    "autoruns_entry": "entry1"
+                },
+                {
+                    "type": "disable-localuser",
+                    "username": "evil.user"
+                },
+                {
+                    "type": "disable-domainuser",
+                    "samAccountName": "evil.user@domain.com"
+                }
+            ]
+        },
+        {
+            "name": "endpoint2",
+            "credentials": "credential1",
+            "actions": [
+                {
+                    "type": "delete-file",
+                    "path": "C:\\path\\to\\file.txt"
+                },
+                {
+                    "type": "remove-persistence",
+                    "autoruns_entry": "entry1"
+                }
+            ]
+        },
+        {
+            "name": "endpoint3",
+            "credentials": "credential2",
+            "actions": [
+                {
+                    "type": "kill-process",
+                    "process_id": "2345"
+                },                
+                {
+                    "type": "kill-process",
+                    "process_id": "3456"
+                }
+            ]
+        }
+    ]
+}
