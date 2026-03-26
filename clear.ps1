@@ -70,28 +70,58 @@ function Disable-DomainUser {
 }
 
 # Read JSON file
-$jsonData = Get-Content -Path 'input.json' | ConvertFrom-Json
+#$jsonData = Get-Content -Path 'input.json' | ConvertFrom-Json
+# read from clear.csv
+$csvData = Import-Csv -Path 'clear.csv'
+$jsonData = [PSCustomObject]@{
+    endpoints = @()
+}
+foreach ($row in $csvData) {
+    $jsonData.endpoints += [PSCustomObject]@{
+        host = $row.host
+        credentials = $row.creds
+        actions = @(
+            [PSCustomObject]@{
+                type = $row.action
+                target = $row.target.Trim()
+            }
+        )
+    }
+}
+
 
 $credsHashTable = @{}
 # Loop through each endpoint in the JSON data
-foreach ($endpoint in $jsonData.endpoints) {
-    # Prompt for credentials
-    if ($credsHashTable.ContainsKey($endpoint.credentials)) {
+#only loop through unique endpoints
+$uniquecreds = $jsonData.endpoints.credentials | Select-Object -Unique
+foreach ($creds in $uniquecreds) {
+    write-host "Enter credentials for $creds"
+    $credential = Get-Credential -Message "Enter credentials for $creds"
+    if ($credsHashTable[$creds] -ne $null) {
         continue
     }
-    $credential = Get-Credential -Message "Enter credentials for $($endpoint.credentials)"
-    $credsHashTable[$endpoint.credentials] = $credential
+    $credsHashTable[$creds] = $credential
+    
 }
 
 $autoRunscPath = '.\autorunsc.exe'
 # Loop through each endpoint in the JSON data
+
+$lasthostname = ""
 foreach ($endpoint in $jsonData.endpoints) {
+    Write-Host "Processing $($endpoint.host)"
     # Prompt for credentials
     $credential = $credsHashTable[$endpoint.credentials]
-    $session = New-PSSession -ComputerName $endpoint.name -Credential $credential 
+    if ($lasthostname -ne $endpoint.host) {
+        $lasthostname = $endpoint.host
+        $session = New-PSSession -ComputerName $endpoint.host -Credential $credential
+        write-host "Session created for $endpoint.host"
+    }
+    $lasthostname = $endpoint.host
 
     #check if $endpoint.actions contains any actions named remove-persistence
     $removePersistenceExist = $endpoint.actions | Where-Object { $_.type -eq 'remove-persistence' }
+    $removePersistenceExist = $false
     if ($removePersistenceExist) {
         $installResults = Invoke-Command -Session $session -ScriptBlock {
             $autorunscPath = Join-Path -Path $env:TEMP -ChildPath '\autorunsc.exe'
@@ -108,24 +138,29 @@ foreach ($endpoint in $jsonData.endpoints) {
     # Perform actions based on the JSON data
     foreach ($action in $endpoint.actions) {
         switch ($action.type) {
-            'kill-process' {
-                Invoke-Command -Session $session -ScriptBlock ${function:Stop-ProcessForce} -ArgumentList $action.process_id
+            'Stop-ProcessForce' {
+                Write-Host "Killing process $($action.target) on $($endpoint.host)"
+                Invoke-Command -Session $session -ScriptBlock ${function:Stop-ProcessForce} -ArgumentList $action
             }
-            'delete-file' {
-                Invoke-Command -Session $session -ScriptBlock ${function:Remove-File} -ArgumentList $action.path
+            'Remove-File' {
+                Write-Host "Deleting file $($action.target) on $($endpoint.host)"
+                Invoke-Command -Session $session -ScriptBlock ${function:Remove-File} -ArgumentList $action.target
             }
             'remove-persistence' {
-                Invoke-Command -Session $session -ScriptBlock ${function:Remove-Persistence} -ArgumentList $action.autoruns_entry $installResults.DownloadPath
+                Write-Host "Removing persistence entry $($action.target) on $($endpoint.host)"
+                Invoke-Command -Session $session -ScriptBlock ${function:Remove-Persistence} -ArgumentList $action.target $installResults.DownloadPath
             }
             'disable-localuser' {
-                Invoke-Command -Session $session -ScriptBlock ${function:Disable-LocalUser} -ArgumentList $action.username
+                Write-Host "Disabling local user $($action.target) on $($endpoint.host)"
+                Invoke-Command -Session $session -ScriptBlock ${function:Disable-LocalUser} -ArgumentList $action.target
             }
             'disable-domainuser' {
-                Invoke-Command -Session $session -ScriptBlock ${function:Disable-DomainUser} -ArgumentList $action.samAccountName
+                Write-Host "Disabling domain user $($action.target) on $($endpoint.host)"
+                Invoke-Command -Session $session -ScriptBlock ${function:Disable-DomainUser} -ArgumentList $action.target
             }
         }
     }
 
     # Close the PSRemote session
-    Remove-PSSession -Session $session
+    #Remove-PSSession -Session $session
 }

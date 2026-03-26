@@ -1,0 +1,54 @@
+host,creds,action,target,result
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,randy.benitez.yvqer,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,randy.benitez.sgynu ,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,randy.benitez.ezmpg ,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,randy.benitez.uytio ,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,randy.benitez.tscfi ,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,randy.benitez.chNbse,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,terry.todd.dncsy,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,Terry.Todd.dncsy,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,Cornelius.Faulkner,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,Denise.Arias,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,Gayle.Blanchard,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,irving.schneider,
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,Jeffry.Powell,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,Melba.Schwartz,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,tanner.ayers,
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,terry.todd.dncsy,failed
+mda-dc2.mda.mil,mda creds,Disable-DomainUser,Wyatt.Johnson,failed
+mda-sql.mda.mil,mda creds,Stop-ProcessForce,C:\windows\System32\WindowsPowerShell\v1.0\powershell.exe,failed
+mda-sql.mda.mil,mda creds,Stop-ProcessForce,C:\windows\system32\cmd.exe,failed
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,Cornelius.Faulkner,
+pao-dc2.pao.mil,pao creds,Remove-File,C:\FileShare\C0peN0te.bat,
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,randy.benitez.yvqer ,failed
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,randy.benitez.sgynu ,failed
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,randy.benitez.ezmpg ,failed
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,randy.benitez.uytio ,failed
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,randy.benitez.tscfi ,failed
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,randy.benitez.chNbse,failed
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,terry.todd.dncsy,failed
+pao-dc2.pao.mil,pao creds,Remove-File,C:\Windows\system32\certsrv.exe,
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,Terry.Todd,
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,Cornelius.Faulkner,
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,Denise.Arias,
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,Gayle.Blanchard,
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,irving.schneider,failed
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,Jeffry.Powell,
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,Melba.Schwartz,
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,tanner.ayers,
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,terry.todd,
+pao-dc2.pao.mil,pao creds,Disable-DomainUser,Wyatt.Johnson,
+pao-shrpt.pao.mil,pao creds,Remove-File,\\42.0.2.4\Share\S1_Invoice.doc,
+pao-sql.pao.mil,pao creds,Stop-ProcessForce,564,failed
+pao-sql.pao.mil,pao creds,Stop-ProcessForce,4060,
+pao-sql.pao.mil,pao creds,Stop-ProcessForce,304,
+pao-sql.pao.mil,pao creds,Stop-ProcessForce,540,
+pao-sql.pao.mil,pao creds,Stop-ProcessForce,9424,
+pao-sql.pao.mil,pao creds,Stop-ProcessForce,3844,
+pao-sql.pao.mil,pao creds,Stop-ProcessForce,872,
+pao-sql.pao.mil,pao creds,Remove-File,C:\Windows\zjiusvPx.exe,
+pao-sql.pao.mil,pao creds,Remove-File,C:\Windows\TYcvPEtg.exe,
+pao-sql.pao.mil,pao creds,Remove-File,C:\Windows\eTSjHZcA.exe,
+pao-sql.pao.mil,pao creds,Remove-File,C:\Windows\xYjJNGYP.exe,failed
+pao-sql.pao.mil,pao creds,Remove-File,c:\windows\zjiusvpx.exe,
+pao-sql.pao.mil,pao creds,Remove-File,c:\windows\system32\comhost.exe,failed

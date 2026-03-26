@@ -306,7 +306,7 @@
             },
             {
                 "name": "CommandLine",
-                "type": "VARCHAR(255)"
+                "type": "VARCHAR(2048)"
             },
             {
                 "name": "ExecutablePath",
@@ -438,7 +438,7 @@
                 "type": "VARCHAR(255)"
             },
             {
-                "name": "PE-SHA1",
+                "name": "PESHA-1",
                 "type": "VARCHAR(255)"
             },
             {
@@ -452,6 +452,19 @@
             {
                 "name": "IMP",
                 "type": "VARCHAR(255)"
+            }
+        ]
+    },
+    {
+        "name": "UserExecutables",
+        "columns": [
+            {
+                "name": "FullName",
+                "type": "VARCHAR(2048)"
+            },
+            {
+                "name": "Length",
+                "type": "INTEGER"
             }
         ]
     }
