@@ -149,7 +149,25 @@ $autorunscScriptBlock = {
         }
         $usersDirectory = Split-Path $env:USERPROFILE -Parent
         try {
-        $userExecutables = Get-ChildItem $usersDirectory -Recurse -Force -Attributes !ReparsePoint -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.exe', '.bat', '.cmd', '.ps1', '.msi', '.jar', '.py', '.sh') } | Select-Object FullName, Length
+        $extensions = @('.exe', '.bat', '.cmd', '.ps1', '.msi', '.jar', '.py', '.sh')
+        $userExecutables = New-Object System.Collections.ArrayList
+        $dirStack = New-Object System.Collections.Stack
+        $dirStack.Push($usersDirectory)
+        while ($dirStack.Count -gt 0) {
+            $dir = $dirStack.Pop()
+            try {
+                foreach ($item in [System.IO.DirectoryInfo]::new($dir).GetFileSystemInfos()) {
+                    if ($item -is [System.IO.DirectoryInfo]) {
+                        # Skip junctions and symlinks to avoid infinite recursion
+                        if (-not ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+                            $dirStack.Push($item.FullName)
+                        }
+                    } elseif ($item.Extension -in $extensions) {
+                        $null = $userExecutables.Add([PSCustomObject]@{ FullName = $item.FullName; Length = $item.Length })
+                    }
+                }
+            } catch {}
+        }
         } catch {
             #Write-Host "Error getting files"
         }
