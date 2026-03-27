@@ -306,11 +306,11 @@
             },
             {
                 "name": "CommandLine",
-                "type": "VARCHAR(2048)"
+                "type": "TEXT"
             },
             {
                 "name": "ExecutablePath",
-                "type": "VARCHAR(255)"
+                "type": "VARCHAR(2048)"
             }
         ]
     },
