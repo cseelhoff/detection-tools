@@ -74,6 +74,9 @@ function CheckAndCreateSnapshotTable($tableName, $tableColumns, $primaryKeys = $
             $command.CommandText = $sql
             $null = $command.ExecuteNonQuery()
         }
+        # Ensure a unique index exists on (SystemUUID, SnapshotTime)
+        $command.CommandText = "CREATE UNIQUE INDEX IF NOT EXISTS idx_systemsnapshots_uuid_time ON public.SystemSnapshots(SystemUUID, SnapshotTime)"
+        $null = $command.ExecuteNonQuery()
     } catch {
         Write-Host "Error executing command: $_"
     } finally {
@@ -84,24 +87,47 @@ function CheckAndCreateSnapshotTable($tableName, $tableColumns, $primaryKeys = $
 function InsertDataIntoSnapshotsTable($systemUUID, $snapshotTime) {
     $command = $connection.CreateCommand()
     $SnapshotIDResult = -1
+    $isExisting = $false
     try {
-        $command.CommandText = "INSERT INTO public.SystemSnapshots (SystemUUID, SnapshotTime) VALUES (@SystemUUID, @SnapshotTime) RETURNING SnapshotID"
-        $command.Parameters.Clear()
+        # Check if a snapshot already exists for this SystemUUID and SnapshotTime
+        $command.CommandText = "SELECT SnapshotID FROM public.SystemSnapshots WHERE SystemUUID = @SystemUUID AND SnapshotTime = @SnapshotTime LIMIT 1"
         $null = $command.Parameters.AddWithValue("@SystemUUID", $systemUUID)
         $null = $command.Parameters.AddWithValue("@SnapshotTime", $snapshotTime)
-        $SnapshotIDResult = $command.ExecuteScalar()
+        $existingID = $command.ExecuteScalar()
+        if ($null -ne $existingID -and $existingID.GetType().Name -ne "DBNull") {
+            $SnapshotIDResult = $existingID
+            $isExisting = $true
+        } else {
+            # No existing snapshot found, insert a new one
+            $command.CommandText = "INSERT INTO public.SystemSnapshots (SystemUUID, SnapshotTime) VALUES (@SystemUUID, @SnapshotTime) RETURNING SnapshotID"
+            $SnapshotIDResult = $command.ExecuteScalar()
+        }
     } catch {
         Write-Host "Error executing command: $_"
     } finally {
         $command.Dispose()
     }
-    return $SnapshotIDResult
+    return @{ SnapshotID = $SnapshotIDResult; IsExisting = $isExisting }
 }
 
 function InsertDataIntoTable($tableName, $tableColumns, $tableData, $snapshotID) {
     # $tableColumns is an array of objects with properties 'name' and 'type'
     $columnNames = ($tableColumns | ForEach-Object { $_.name -replace "[^a-zA-Z0-9]", "" }) -join ","
     $columnParameterNames = ($tableColumns | ForEach-Object { '@' + ($_.name -replace "[^a-zA-Z0-9]", "")}) -join ","
+    # Delete existing rows for this snapshot before reinserting
+    $deleteCmd = $connection.CreateCommand()
+    try {
+        $deleteCmd.CommandText = "DELETE FROM public.$tableName WHERE SnapshotID = @SnapshotID"
+        $null = $deleteCmd.Parameters.AddWithValue("@SnapshotID", $snapshotID)
+        $deletedCount = $deleteCmd.ExecuteNonQuery()
+        if ($deletedCount -gt 0) {
+            Write-Host "  cleared $deletedCount existing rows from $tableName for SnapshotID=$snapshotID"
+        }
+    } catch {
+        Write-Host "Error clearing existing data from ${tableName}: $_"
+    } finally {
+        $deleteCmd.Dispose()
+    }
     $command = $connection.CreateCommand()
     try {
         $command.CommandText = "INSERT INTO public.$tableName (SnapshotID, $columnNames) VALUES (@SnapshotID, $columnParameterNames)"
@@ -158,7 +184,13 @@ foreach ($targetHost in $targetHosts) {
     $result = Get-Content ".\system-info_$($targetHost).json" | ConvertFrom-Json
     $systemUUID = $result.SystemUUID
     $snapshotTime = $result.SnapshotTime
-    $snapshotID = InsertDataIntoSnapshotsTable $systemUUID $snapshotTime
+    $snapshotResult = InsertDataIntoSnapshotsTable $systemUUID $snapshotTime
+    $snapshotID = $snapshotResult.SnapshotID
+    if ($snapshotResult.IsExisting) {
+        Write-Host "  reusing existing snapshot (SnapshotID=$snapshotID) for $targetHost"
+    } else {
+        Write-Host "  created new snapshot (SnapshotID=$snapshotID) for $targetHost"
+    }
     foreach ($table in $jsonTables) {
         $tableName = $table.name
         write-host "importing host data: $targetHost for table name: $tableName"
