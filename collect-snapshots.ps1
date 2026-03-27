@@ -149,7 +149,7 @@ $autorunscScriptBlock = {
         }
         $usersDirectory = Split-Path $env:USERPROFILE -Parent
         try {
-        $userExecutables = Get-ChildItem $usersDirectory -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.exe', '.bat', '.cmd', '.ps1', '.msi', '.jar', '.py', '.sh') } | Select-Object FullName, Length
+        $userExecutables = Get-ChildItem $usersDirectory -Recurse -Force -Attributes !ReparsePoint -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.exe', '.bat', '.cmd', '.ps1', '.msi', '.jar', '.py', '.sh') } | Select-Object FullName, Length
         } catch {
             #Write-Host "Error getting files"
         }
