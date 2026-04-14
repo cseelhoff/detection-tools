@@ -1101,6 +1101,250 @@ public class MftReader
             $tokenPrivileges = & whoami /priv /fo csv 2>$null | ConvertFrom-Csv
         } catch {}
 
+        # ---- Installed Hotfixes ----
+        $installedHotfixes = $null
+        try {
+            $installedHotfixes = Get-HotFix -ErrorAction SilentlyContinue |
+                Select-Object -Property HotFixID, Description, InstalledOn, InstalledBy
+        } catch {}
+
+        # ---- DNS Cache ----
+        $dnsCache = $null
+        try {
+            $dnsCache = Get-DnsClientCache -ErrorAction SilentlyContinue |
+                Select-Object -Property Entry, RecordName, RecordType, Status, Data, TimeToLive
+        } catch {}
+
+        # ---- Saved RDP Connections ----
+        $savedRdpConnections = $null
+        try {
+            $savedRdpConnections = Get-ChildItem 'HKCU:\Software\Microsoft\Terminal Server Client\Servers' -ErrorAction SilentlyContinue | ForEach-Object {
+                $server = $_.PSChildName
+                $hint = (Get-ItemProperty $_.PSPath -Name UsernameHint -ErrorAction SilentlyContinue).UsernameHint
+                [PSCustomObject]@{ Server = $server; UsernameHint = $hint }
+            }
+        } catch {}
+
+        # ---- PuTTY Saved Sessions ----
+        $puttySessions = $null
+        try {
+            $puttySessions = Get-ChildItem 'HKCU:\Software\SimonTatham\PuTTY\Sessions' -ErrorAction SilentlyContinue | ForEach-Object {
+                $props = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+                [PSCustomObject]@{
+                    SessionName = $_.PSChildName
+                    HostName    = $props.HostName
+                    UserName    = $props.UserName
+                    PortNumber  = $props.PortNumber
+                    Protocol    = $props.Protocol
+                    ProxyHost   = $props.ProxyHost
+                }
+            }
+        } catch {}
+
+        # ---- PowerShell Console History ----
+        $psHistory = $null
+        try {
+            $usersDir = Split-Path $env:USERPROFILE -Parent
+            $psHistory = New-Object System.Collections.ArrayList
+            foreach ($userDir in (Get-ChildItem $usersDir -Directory -ErrorAction SilentlyContinue)) {
+                $histPath = Join-Path $userDir.FullName 'AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt'
+                if (Test-Path $histPath) {
+                    $size = (Get-Item $histPath).Length
+                    # Collect last 200 lines only to avoid bloat
+                    $lines = Get-Content $histPath -Tail 200 -ErrorAction SilentlyContinue
+                    $null = $psHistory.Add([PSCustomObject]@{
+                        User  = $userDir.Name
+                        Path  = $histPath
+                        Size  = $size
+                        Lines = $lines
+                    })
+                }
+            }
+        } catch {}
+
+        # ---- Recent Security Events (logon, process creation, PS scriptblock) ----
+        $recentEvents = $null
+        try {
+            $recentEvents = @{}
+            # Last 100 logon events (4624)
+            try {
+                $recentEvents['Logon4624'] = Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4624} -MaxEvents 100 -ErrorAction SilentlyContinue |
+                    Select-Object -Property TimeCreated, Id, @{N='Message'; E={$_.Message.Substring(0, [Math]::Min(500, $_.Message.Length))}}
+            } catch {}
+            # Last 50 failed logons (4625)
+            try {
+                $recentEvents['FailedLogon4625'] = Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4625} -MaxEvents 50 -ErrorAction SilentlyContinue |
+                    Select-Object -Property TimeCreated, Id, @{N='Message'; E={$_.Message.Substring(0, [Math]::Min(500, $_.Message.Length))}}
+            } catch {}
+            # Last 50 process creation events (4688)
+            try {
+                $recentEvents['ProcessCreation4688'] = Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4688} -MaxEvents 50 -ErrorAction SilentlyContinue |
+                    Select-Object -Property TimeCreated, Id, @{N='Message'; E={$_.Message.Substring(0, [Math]::Min(500, $_.Message.Length))}}
+            } catch {}
+            # Last 50 PowerShell ScriptBlock events (4104)
+            try {
+                $recentEvents['ScriptBlock4104'] = Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-PowerShell/Operational'; Id=4104} -MaxEvents 50 -ErrorAction SilentlyContinue |
+                    Select-Object -Property TimeCreated, Id, @{N='Message'; E={$_.Message.Substring(0, [Math]::Min(1000, $_.Message.Length))}}
+            } catch {}
+        } catch {}
+
+        # ---- DPAPI Master Key Inventory ----
+        $dpapiKeys = $null
+        try {
+            $dpapiKeys = New-Object System.Collections.ArrayList
+            $protectDirs = @("$env:APPDATA\Microsoft\Protect", "$env:LOCALAPPDATA\Microsoft\Protect")
+            foreach ($dir in $protectDirs) {
+                if (Test-Path $dir) {
+                    Get-ChildItem $dir -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+                        $null = $dpapiKeys.Add([PSCustomObject]@{
+                            Path = $_.FullName
+                            Name = $_.Name
+                            LastWriteTime = $_.LastWriteTime
+                            Length = $_.Length
+                        })
+                    }
+                }
+            }
+            # Credential files
+            $credDirs = @("$env:APPDATA\Microsoft\Credentials", "$env:LOCALAPPDATA\Microsoft\Credentials")
+            foreach ($dir in $credDirs) {
+                if (Test-Path $dir) {
+                    Get-ChildItem $dir -Force -ErrorAction SilentlyContinue | ForEach-Object {
+                        $null = $dpapiKeys.Add([PSCustomObject]@{
+                            Path = $_.FullName
+                            Name = $_.Name
+                            LastWriteTime = $_.LastWriteTime
+                            Length = $_.Length
+                        })
+                    }
+                }
+            }
+        } catch {}
+
+        # ---- WiFi Profiles ----
+        $wifiProfiles = $null
+        try {
+            $wifiOutput = & netsh wlan show profiles 2>$null
+            if ($wifiOutput) {
+                $wifiProfiles = $wifiOutput | Select-String 'All User Profile' | ForEach-Object {
+                    $name = ($_ -split ':')[1].Trim()
+                    [PSCustomObject]@{ SSID = $name }
+                }
+            }
+        } catch {}
+
+        # ---- Mapped Drives ----
+        $mappedDrives = $null
+        try {
+            $mappedDrives = Get-CimInstance Win32_MappedLogicalDisk -ErrorAction SilentlyContinue |
+                Select-Object -Property Name, ProviderName, SessionID, Size, FreeSpace
+        } catch {}
+
+        # ---- Hosts File ----
+        $hostsFileContent = $null
+        try {
+            $hostsPath = "$env:SystemRoot\System32\drivers\etc\hosts"
+            $hostsFileContent = (Get-Content $hostsPath -ErrorAction SilentlyContinue | Where-Object { $_ -and $_ -notmatch '^\s*#' }) -join "`n"
+        } catch {}
+
+        # ---- Service Binary ACLs (for offline priv-esc analysis) ----
+        $serviceBinaryAcls = $null
+        try {
+            $serviceBinaryAcls = New-Object System.Collections.ArrayList
+            $allServices = Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.PathName }
+            foreach ($svc in $allServices) {
+                $binPath = $svc.PathName -replace '"','' -replace '\s+-.*$','' -replace '\s+/.*$',''
+                if (-not (Test-Path $binPath -ErrorAction SilentlyContinue)) { continue }
+                try {
+                    $acl = Get-Acl $binPath -ErrorAction Stop
+                    $null = $serviceBinaryAcls.Add([PSCustomObject]@{
+                        ServiceName = $svc.Name
+                        BinaryPath  = $binPath
+                        Owner       = $acl.Owner
+                        SDDL        = $acl.Sddl
+                    })
+                } catch {}
+            }
+        } catch {}
+
+        # ---- Scheduled Task Binary ACLs ----
+        $taskBinaryAcls = $null
+        try {
+            $taskBinaryAcls = New-Object System.Collections.ArrayList
+            $allTasks = Get-ScheduledTask -ErrorAction SilentlyContinue
+            foreach ($task in $allTasks) {
+                foreach ($action in $task.Actions) {
+                    if (-not $action.Execute) { continue }
+                    $exePath = $action.Execute -replace '"',''
+                    if (-not (Test-Path $exePath -ErrorAction SilentlyContinue)) { continue }
+                    try {
+                        $acl = Get-Acl $exePath -ErrorAction Stop
+                        $null = $taskBinaryAcls.Add([PSCustomObject]@{
+                            TaskName   = $task.TaskName
+                            TaskPath   = $task.TaskPath
+                            BinaryPath = $exePath
+                            RunAs      = $task.Principal.UserId
+                            Owner      = $acl.Owner
+                            SDDL       = $acl.Sddl
+                        })
+                    } catch {}
+                }
+            }
+        } catch {}
+
+        # ---- PATH Directory ACLs ----
+        $pathDirAcls = $null
+        try {
+            $pathDirAcls = ($env:PATH -split ';') | Where-Object { $_ -and (Test-Path $_) } | ForEach-Object {
+                try {
+                    $acl = Get-Acl $_ -ErrorAction Stop
+                    [PSCustomObject]@{ Path = $_; Owner = $acl.Owner; SDDL = $acl.Sddl }
+                } catch {}
+            }
+        } catch {}
+
+        # ---- Named Pipe SDDLs (top 200 for size control) ----
+        $namedPipeAcls = $null
+        try {
+            $pipeNames = [System.IO.Directory]::GetFiles('\\.\pipe\') | Select-Object -First 200
+            $namedPipeAcls = New-Object System.Collections.ArrayList
+            foreach ($pipe in $pipeNames) {
+                $pipeName = $pipe -replace '^\\\\.\\pipe\\',''
+                try {
+                    $acl = Get-Acl "\\.\pipe\$pipeName" -ErrorAction Stop
+                    $null = $namedPipeAcls.Add([PSCustomObject]@{ Name = $pipeName; SDDL = $acl.Sddl })
+                } catch {
+                    $null = $namedPipeAcls.Add([PSCustomObject]@{ Name = $pipeName; SDDL = 'ACCESS_DENIED' })
+                }
+            }
+        } catch {}
+
+        # ---- SMB Share ACLs ----
+        $shareAcls = $null
+        try {
+            $shareAcls = Get-SmbShare -ErrorAction SilentlyContinue | ForEach-Object {
+                $shareAccess = Get-SmbShareAccess -Name $_.Name -ErrorAction SilentlyContinue |
+                    Select-Object -Property AccountName, AccessControlType, AccessRight
+                [PSCustomObject]@{
+                    ShareName   = $_.Name
+                    Path        = $_.Path
+                    Permissions = $shareAccess
+                }
+            }
+        } catch {}
+
+        # ---- Home Directory ACLs ----
+        $homeDirAcls = $null
+        try {
+            $usersDir2 = Split-Path $env:USERPROFILE -Parent
+            $homeDirAcls = Get-ChildItem $usersDir2 -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                try {
+                    $acl = Get-Acl $_.FullName -ErrorAction Stop
+                    [PSCustomObject]@{ Path = $_.FullName; Owner = $acl.Owner; SDDL = $acl.Sddl }
+                } catch {}
+            }
+        } catch {}
+
         $dateTimeFinished = Get-Date
         [PSCustomObject]@{
             SystemUUID = $systemUUID
@@ -1171,6 +1415,22 @@ public class MftReader
             UnattendFiles = $unattendFiles
             Printers = $printers
             TokenPrivileges = $tokenPrivileges
+            InstalledHotfixes = $installedHotfixes
+            DnsCache = $dnsCache
+            SavedRdpConnections = $savedRdpConnections
+            PuttySessions = $puttySessions
+            PSHistory = $psHistory
+            RecentEvents = $recentEvents
+            DPAPIKeys = $dpapiKeys
+            WifiProfiles = $wifiProfiles
+            MappedDrives = $mappedDrives
+            HostsFileContent = $hostsFileContent
+            ServiceBinaryAcls = $serviceBinaryAcls
+            TaskBinaryAcls = $taskBinaryAcls
+            PathDirAcls = $pathDirAcls
+            NamedPipeAcls = $namedPipeAcls
+            ShareAcls = $shareAcls
+            HomeDirAcls = $homeDirAcls
         }
     }
     $snapshotResults

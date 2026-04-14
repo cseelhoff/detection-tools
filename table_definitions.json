@@ -467,5 +467,145 @@
                 "type": "INTEGER"
             }
         ]
+    },
+    {
+        "name": "SecurityProducts",
+        "columns": [
+            { "name": "Type", "type": "VARCHAR(255)" },
+            { "name": "DisplayName", "type": "VARCHAR(255)" },
+            { "name": "InstanceGuid", "type": "VARCHAR(255)" },
+            { "name": "PathToSignedProductExe", "type": "VARCHAR(2048)" },
+            { "name": "ProductState", "type": "INTEGER" },
+            { "name": "Enabled", "type": "BOOLEAN" },
+            { "name": "DefinitionsUpToDate", "type": "BOOLEAN" }
+        ]
+    },
+    {
+        "name": "EDRServices",
+        "columns": [
+            { "name": "ServiceName", "type": "VARCHAR(255)" },
+            { "name": "DisplayName", "type": "VARCHAR(255)" },
+            { "name": "Status", "type": "VARCHAR(255)" },
+            { "name": "StartType", "type": "VARCHAR(255)" }
+        ]
+    },
+    {
+        "name": "FirewallRules",
+        "columns": [
+            { "name": "Name", "type": "VARCHAR(255)" },
+            { "name": "DisplayName", "type": "VARCHAR(512)" },
+            { "name": "Direction", "type": "VARCHAR(255)" },
+            { "name": "Action", "type": "VARCHAR(255)" },
+            { "name": "Profile", "type": "VARCHAR(255)" },
+            { "name": "Enabled", "type": "VARCHAR(255)" },
+            { "name": "Description", "type": "TEXT" }
+        ]
+    },
+    {
+        "name": "LoggedOnUsers",
+        "columns": [
+            { "name": "UserName", "type": "VARCHAR(255)" },
+            { "name": "SessionName", "type": "VARCHAR(255)" },
+            { "name": "SessionId", "type": "VARCHAR(255)" },
+            { "name": "State", "type": "VARCHAR(255)" },
+            { "name": "IdleTime", "type": "VARCHAR(255)" },
+            { "name": "LogonTime", "type": "VARCHAR(255)" }
+        ]
+    },
+    {
+        "name": "InstalledApps",
+        "columns": [
+            { "name": "DisplayName", "type": "VARCHAR(512)" },
+            { "name": "DisplayVersion", "type": "VARCHAR(255)" },
+            { "name": "Publisher", "type": "VARCHAR(255)" },
+            { "name": "InstallLocation", "type": "VARCHAR(2048)" },
+            { "name": "InstallDate", "type": "VARCHAR(255)" }
+        ]
+    },
+    {
+        "name": "ScheduledTasks",
+        "columns": [
+            { "name": "TaskName", "type": "VARCHAR(512)" },
+            { "name": "TaskPath", "type": "VARCHAR(512)" },
+            { "name": "Author", "type": "VARCHAR(255)" },
+            { "name": "State", "type": "VARCHAR(255)" },
+            { "name": "Actions", "type": "TEXT" },
+            { "name": "RunAs", "type": "VARCHAR(255)" }
+        ]
+    },
+    {
+        "name": "ThirdPartyServices",
+        "columns": [
+            { "name": "Name", "type": "VARCHAR(255)" },
+            { "name": "DisplayName", "type": "VARCHAR(512)" },
+            { "name": "State", "type": "VARCHAR(255)" },
+            { "name": "StartMode", "type": "VARCHAR(255)" },
+            { "name": "PathName", "type": "VARCHAR(2048)" },
+            { "name": "StartName", "type": "VARCHAR(255)" },
+            { "name": "Company", "type": "VARCHAR(255)" }
+        ]
+    },
+    {
+        "name": "ThirdPartyDrivers",
+        "columns": [
+            { "name": "Name", "type": "VARCHAR(255)" },
+            { "name": "Path", "type": "VARCHAR(2048)" },
+            { "name": "Company", "type": "VARCHAR(255)" },
+            { "name": "Product", "type": "VARCHAR(255)" },
+            { "name": "Version", "type": "VARCHAR(255)" }
+        ]
+    },
+    {
+        "name": "NamedPipes",
+        "columns": [
+            { "name": "Name", "type": "VARCHAR(512)" }
+        ]
+    },
+    {
+        "name": "Certificates",
+        "columns": [
+            { "name": "Subject", "type": "TEXT" },
+            { "name": "Issuer", "type": "TEXT" },
+            { "name": "NotAfter", "type": "TIMESTAMP" },
+            { "name": "HasPrivateKey", "type": "BOOLEAN" },
+            { "name": "Thumbprint", "type": "VARCHAR(255)" },
+            { "name": "EKU", "type": "TEXT" },
+            { "name": "Template", "type": "VARCHAR(512)" }
+        ]
+    },
+    {
+        "name": "InstalledHotfixes",
+        "columns": [
+            { "name": "HotFixID", "type": "VARCHAR(255)" },
+            { "name": "Description", "type": "VARCHAR(255)" },
+            { "name": "InstalledOn", "type": "VARCHAR(255)" },
+            { "name": "InstalledBy", "type": "VARCHAR(255)" }
+        ]
+    },
+    {
+        "name": "MappedDrives",
+        "columns": [
+            { "name": "Name", "type": "VARCHAR(255)" },
+            { "name": "ProviderName", "type": "VARCHAR(512)" },
+            { "name": "SessionID", "type": "VARCHAR(255)" },
+            { "name": "Size", "type": "BIGINT" },
+            { "name": "FreeSpace", "type": "BIGINT" }
+        ]
+    },
+    {
+        "name": "ServiceBinaryAcls",
+        "columns": [
+            { "name": "ServiceName", "type": "VARCHAR(255)" },
+            { "name": "BinaryPath", "type": "VARCHAR(2048)" },
+            { "name": "Owner", "type": "VARCHAR(255)" },
+            { "name": "SDDL", "type": "TEXT" }
+        ]
+    },
+    {
+        "name": "NamedPipeAcls",
+        "columns": [
+            { "name": "Name", "type": "VARCHAR(512)" },
+            { "name": "SDDL", "type": "TEXT" }
+        ]
     }
 ]

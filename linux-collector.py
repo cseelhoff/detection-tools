@@ -1780,6 +1780,250 @@ def get_terminal_sessions():
 
 
 # ---------------------------------------------------------------------------
+# Sudo Version (for CVE matching)
+# ---------------------------------------------------------------------------
+def get_sudo_version():
+    return run("sudo -V 2>/dev/null | head -1")
+
+
+# ---------------------------------------------------------------------------
+# Shell History (last 200 lines per user, for credential leak detection)
+# ---------------------------------------------------------------------------
+def get_shell_history():
+    histories = []
+    for line in read_file_contents("/etc/passwd").splitlines():
+        parts = line.split(":")
+        if len(parts) < 6:
+            continue
+        username = parts[0]
+        home = parts[5]
+        for hist_file in [".bash_history", ".zsh_history", ".sh_history"]:
+            hist_path = os.path.join(home, hist_file)
+            content = read_file_contents(hist_path)
+            if not content:
+                continue
+            lines = content.splitlines()
+            histories.append({
+                "User": username,
+                "File": hist_path,
+                "TotalLines": len(lines),
+                "Last200": lines[-200:] if len(lines) > 200 else lines,
+            })
+    return histories
+
+
+# ---------------------------------------------------------------------------
+# SSH Private Key Locations
+# ---------------------------------------------------------------------------
+def get_ssh_private_keys():
+    keys = []
+    output = run(
+        "find /home /root /etc /opt -maxdepth 4 "
+        "\\( -name 'id_rsa' -o -name 'id_dsa' -o -name 'id_ecdsa' -o -name 'id_ed25519' "
+        "-o -name '*.pem' -o -name '*.key' \\) "
+        "-type f 2>/dev/null",
+        timeout=30,
+    )
+    for line in output.splitlines():
+        path = line.strip()
+        if not path:
+            continue
+        try:
+            st = os.stat(path)
+            keys.append({
+                "Path": path,
+                "Size": st.st_size,
+                "Mode": oct(st.st_mode),
+                "Owner": st.st_uid,
+            })
+        except Exception:
+            keys.append({"Path": path})
+    return keys
+
+
+# ---------------------------------------------------------------------------
+# Interesting Hidden Files (.env, .netrc, .pgpass, .my.cnf, etc.)
+# ---------------------------------------------------------------------------
+def get_interesting_hidden_files():
+    patterns = [
+        ".env", ".netrc", ".pgpass", ".my.cnf", ".s3cfg",
+        ".git-credentials", ".docker/config.json", ".kube/config",
+        ".npmrc", ".pypirc", ".composer/auth.json",
+    ]
+    found = []
+    search_roots = ["/home", "/root", "/opt", "/var/www", "/srv"]
+    for root_dir in search_roots:
+        if not os.path.isdir(root_dir):
+            continue
+        for dirpath, dirnames, filenames in os.walk(root_dir):
+            # Limit depth to 5
+            depth = dirpath.replace(root_dir, "").count(os.sep)
+            if depth > 5:
+                dirnames.clear()
+                continue
+            # Skip noise dirs
+            for skip in [".cache", "node_modules", ".git", "__pycache__", ".npm"]:
+                if skip in dirnames:
+                    dirnames.remove(skip)
+            for fname in filenames:
+                for pattern in patterns:
+                    if fname == pattern or dirpath.endswith(os.path.dirname(pattern)) and fname == os.path.basename(pattern):
+                        full = os.path.join(dirpath, fname)
+                        try:
+                            st = os.stat(full)
+                            found.append({
+                                "Path": full,
+                                "Size": st.st_size,
+                                "Mode": oct(st.st_mode),
+                            })
+                        except Exception:
+                            found.append({"Path": full})
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Process Binary Permissions (for offline writability analysis)
+# ---------------------------------------------------------------------------
+def get_process_binary_permissions():
+    """Stat the binary of every running process — enables offline writable-binary detection."""
+    bins = {}
+    for pid_dir in glob.glob("/proc/[0-9]*"):
+        try:
+            exe = os.readlink(os.path.join(pid_dir, "exe"))
+            if "(deleted)" in exe or exe in bins:
+                continue
+            st = os.stat(exe)
+            bins[exe] = {
+                "Path": exe,
+                "Mode": oct(st.st_mode),
+                "UID": st.st_uid,
+                "GID": st.st_gid,
+                "Size": st.st_size,
+            }
+        except Exception:
+            pass
+    return list(bins.values())
+
+
+# ---------------------------------------------------------------------------
+# Systemd Unit File Permissions
+# ---------------------------------------------------------------------------
+def get_systemd_unit_permissions():
+    """Permissions on systemd .service files — writable = persistence hijack."""
+    units = []
+    output = run(
+        "systemctl list-unit-files --type=service --no-pager --no-legend 2>/dev/null"
+    )
+    for line in output.splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        unit_name = parts[0]
+        # Find the unit file path
+        unit_path = run(f"systemctl show {unit_name} -p FragmentPath --no-pager 2>/dev/null")
+        if "=" in unit_path:
+            path = unit_path.split("=", 1)[1].strip()
+            if path and os.path.exists(path):
+                try:
+                    st = os.stat(path)
+                    units.append({
+                        "Unit": unit_name,
+                        "Path": path,
+                        "Mode": oct(st.st_mode),
+                        "UID": st.st_uid,
+                        "GID": st.st_gid,
+                    })
+                except Exception:
+                    pass
+    return units
+
+
+# ---------------------------------------------------------------------------
+# Cron Script Permissions
+# ---------------------------------------------------------------------------
+def get_cron_script_permissions():
+    """Permissions on scripts referenced by cron — writable = escalation."""
+    scripts = []
+    seen = set()
+    # Cron directories
+    for cron_dir in ["/etc/cron.hourly", "/etc/cron.daily",
+                     "/etc/cron.weekly", "/etc/cron.monthly"]:
+        if not os.path.isdir(cron_dir):
+            continue
+        for item in os.listdir(cron_dir):
+            full = os.path.join(cron_dir, item)
+            if full in seen or not os.path.isfile(full):
+                continue
+            seen.add(full)
+            try:
+                st = os.stat(full)
+                scripts.append({
+                    "Path": full,
+                    "Mode": oct(st.st_mode),
+                    "UID": st.st_uid,
+                    "GID": st.st_gid,
+                })
+            except Exception:
+                pass
+    # System crontab entries — extract paths
+    for cron_file in ["/etc/crontab"] + glob.glob("/etc/cron.d/*"):
+        content = read_file_contents(cron_file)
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # Try to extract command path (after the 5 time fields + user field)
+            parts = line.split()
+            if len(parts) >= 7:
+                cmd = parts[6].split()[0] if parts[6] else ""
+                if cmd.startswith("/") and cmd not in seen and os.path.exists(cmd):
+                    seen.add(cmd)
+                    try:
+                        st = os.stat(cmd)
+                        scripts.append({
+                            "Path": cmd,
+                            "Source": cron_file,
+                            "Mode": oct(st.st_mode),
+                            "UID": st.st_uid,
+                            "GID": st.st_gid,
+                        })
+                    except Exception:
+                        pass
+    return scripts
+
+
+# ---------------------------------------------------------------------------
+# ld.so.conf Parsed Paths with Permissions
+# ---------------------------------------------------------------------------
+def get_ld_so_conf_permissions():
+    """Parsed ld.so.conf paths with stat — writable = shared library injection."""
+    paths = []
+    seen = set()
+    for conf in ["/etc/ld.so.conf"] + glob.glob("/etc/ld.so.conf.d/*"):
+        content = read_file_contents(conf)
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("include"):
+                continue
+            if line in seen:
+                continue
+            seen.add(line)
+            if os.path.isdir(line):
+                try:
+                    st = os.stat(line)
+                    paths.append({
+                        "Path": line,
+                        "ConfigFile": conf,
+                        "Mode": oct(st.st_mode),
+                        "UID": st.st_uid,
+                        "GID": st.st_gid,
+                    })
+                except Exception:
+                    pass
+    return paths
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
@@ -1839,6 +2083,14 @@ def main():
         "InetdServices": get_inetd_services(),
         "RcommandsTrust": get_rcommands_trust(),
         "TerminalSessions": get_terminal_sessions(),
+        "SudoVersion": get_sudo_version(),
+        "ShellHistory": get_shell_history(),
+        "SshPrivateKeys": get_ssh_private_keys(),
+        "InterestingHiddenFiles": get_interesting_hidden_files(),
+        "ProcessBinaryPermissions": get_process_binary_permissions(),
+        "SystemdUnitPermissions": get_systemd_unit_permissions(),
+        "CronScriptPermissions": get_cron_script_permissions(),
+        "LdSoConfPermissions": get_ld_so_conf_permissions(),
         "CollectionErrors": ERRORS,
     }
 
