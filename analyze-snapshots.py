@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-analyze-snapshots.py — Offline PEASS-ng-style security analysis of collected snapshots.
+analyze-snapshots.py -- Offline PEASS-ng-style security analysis of collected snapshots.
 
 Reads system-info_*.json snapshot files (produced by collect-snapshots.ps1 or
 linux-collector.py) and performs comprehensive security posture analysis with
@@ -18,6 +18,13 @@ import sys
 import os
 import glob
 import re
+
+# Force UTF-8 output on Windows terminals
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf8'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 # ============================================================================
 # ANSI Colors
@@ -45,22 +52,22 @@ def _reset_counts():
         _counts[k] = 0
 
 def banner():
-    print(MAGENTA(r"""
-    ╔══════════════════════════════════════════════════════════╗
-    ║     Offline Snapshot Analyzer — PEASS-ng Style          ║
-    ║     Defensive Security Posture Assessment               ║
-    ╚══════════════════════════════════════════════════════════╝
+    print(MAGENTA("""
+    +----------------------------------------------------------+
+    |     Offline Snapshot Analyzer -- PEASS-ng Style           |
+    |     Defensive Security Posture Assessment                 |
+    +----------------------------------------------------------+
     """))
 
 def section(title, mitre=""):
     m = f" [{mitre}]" if mitre else ""
     print(f"\n{'='*70}")
-    print(MAGENTA(BOLD(f"  ══════════════ {title}{m} ══════════════")))
+    print(MAGENTA(BOLD(f"  ============== {title}{m} ==============")))
     print(f"{'='*70}")
 
 def subsection(title, mitre=""):
     m = f" [{mitre}]" if mitre else ""
-    print(CYAN(f"\n  ╔══════════╣ {title}{m}"))
+    print(CYAN(f"\n  +----------| {title}{m}"))
 
 def good(msg):
     _counts["good"] += 1
@@ -154,12 +161,12 @@ def analyze_windows(snap):
     subsection("Installed Hotfixes")
     hf = snap.get("InstalledHotfixes") or []
     if not hf:
-        warn("No hotfix data — vulnerability assessment limited")
+        warn("No hotfix data -- vulnerability assessment limited")
     else:
         info(f"{len(hf)} hotfixes installed")
         try:
             for h in sorted(hf, key=lambda x: str(x.get("InstalledOn", "")), reverse=True)[:5]:
-                detail(f"{h.get('HotFixID')} — {h.get('Description', '')} — {h.get('InstalledOn', '')}")
+                detail(f"{h.get('HotFixID')} -- {h.get('Description', '')} -- {h.get('InstalledOn', '')}")
         except Exception:
             pass
 
@@ -175,7 +182,7 @@ def analyze_windows(snap):
             parts.append(RED("Disabled"))
         if p.get("DefinitionsUpToDate") is False:
             parts.append(RED("Defs outdated"))
-        detail(f"{p.get('Type','?')}: {p.get('DisplayName','?')} — {' | '.join(parts)}")
+        detail(f"{p.get('Type','?')}: {p.get('DisplayName','?')} -- {' | '.join(parts)}")
 
     subsection("Windows Defender Status")
     ds = first(snap.get("DefenderStatus"))
@@ -234,7 +241,7 @@ def analyze_windows(snap):
     subsection("AMSI Providers")
     amsi = snap.get("AMSIProviders") or []
     if not amsi:
-        warn("No AMSI providers — script scanning may be disabled")
+        warn("No AMSI providers -- script scanning may be disabled")
     else:
         for p in amsi:
             good(f"AMSI: {p.get('DllPath', '?')} ({p.get('CLSID', '')})")
@@ -260,23 +267,23 @@ def analyze_windows(snap):
     subsection("LSA Protection (RunAsPPL)")
     ppl = regval(snap, "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa", "RunAsPPL")
     if ppl and str(ppl) in ("1", "2"):
-        good(f"RunAsPPL = {ppl} — LSASS protected")
+        good(f"RunAsPPL = {ppl} -- LSASS protected")
     else:
-        bad("RunAsPPL not set — LSASS is dumpable")
+        bad("RunAsPPL not set -- LSASS is dumpable")
 
     subsection("WDigest")
     wd = regval(snap, "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest", "UseLogonCredential")
     if wd and str(wd) == "1":
-        crit("WDigest UseLogonCredential=1 — PLAINTEXT PASSWORDS IN MEMORY")
+        crit("WDigest UseLogonCredential=1 -- PLAINTEXT PASSWORDS IN MEMORY")
     elif wd and str(wd) == "0":
         good("WDigest disabled")
     else:
-        info("UseLogonCredential not set (default disabled on Win≥8.1)")
+        info("UseLogonCredential not set (default disabled on Win>=8.1)")
 
     subsection("AutoLogon Credentials")
     al = first(snap.get("AutoLogon"))
     if al and al.get("DefaultPassword"):
-        crit(f"AutoLogon PASSWORD for '{al.get('DefaultUserName')}' — cleartext in registry!")
+        crit(f"AutoLogon PASSWORD for '{al.get('DefaultUserName')}' -- cleartext in registry!")
     elif al and str(al.get("AutoAdminLogon")) == "1":
         warn(f"AutoAdminLogon enabled for '{al.get('DefaultUserName')}'")
     else:
@@ -287,7 +294,7 @@ def analyze_windows(snap):
     if laps and laps.get("DllExists"):
         good("LAPS installed")
     else:
-        bad("LAPS NOT installed — local admin passwords may be shared")
+        bad("LAPS NOT installed -- local admin passwords may be shared")
 
     subsection("Cached Credentials (cmdkey)")
     cc = snap.get("CachedCredentials")
@@ -318,12 +325,12 @@ def analyze_windows(snap):
                 (bad if str(val) == "0" else good)(f"ConsentPromptBehaviorAdmin = {val}")
             elif k == "LocalAccountTokenFilterPolicy":
                 if str(val) == "1":
-                    bad("LocalAccountTokenFilterPolicy=1 — pass-the-hash enabled")
+                    bad("LocalAccountTokenFilterPolicy=1 -- pass-the-hash enabled")
 
     subsection("AlwaysInstallElevated")
     aie = first(snap.get("AlwaysInstallElevated"))
     if aie and str(aie.get("HKLM")) == "1" and str(aie.get("HKCU")) == "1":
-        crit("AlwaysInstallElevated BOTH set — any user → SYSTEM via MSI!")
+        crit("AlwaysInstallElevated BOTH set -- any user -> SYSTEM via MSI!")
     else:
         good("AlwaysInstallElevated not exploitable")
 
@@ -344,7 +351,7 @@ def analyze_windows(snap):
     if flagged:
         bad(f"{flagged} service binary(ies) may be writable by low-priv users")
     elif sb_acls:
-        good(f"Checked {len(sb_acls)} service binaries — none writable")
+        good(f"Checked {len(sb_acls)} service binaries -- none writable")
 
     subsection("PATH Directory ACLs")
     for p in (snap.get("PathDirAcls") or []):
@@ -382,7 +389,7 @@ def analyze_windows(snap):
     if snap.get("WEFConfig"):
         good("Windows Event Forwarding configured")
     else:
-        warn("No WEF — logs not forwarded")
+        warn("No WEF -- logs not forwarded")
 
     # ---- Network ----
     section("Network & Remote Access", "T1021")
@@ -422,7 +429,7 @@ def analyze_windows(snap):
             continue
         ra = c.get("RemoteAddress", "")
         if ra and not ra.startswith(("10.", "192.168.", "172.", "0.0.0.0", "127.", "::", "::1")):
-            detail(f"{c.get('LocalAddress')}:{c.get('LocalPort')} → {ra}:{c.get('RemotePort')} (PID {c.get('OwningProcess')})")
+            detail(f"{c.get('LocalAddress')}:{c.get('LocalPort')} -> {ra}:{c.get('RemotePort')} (PID {c.get('OwningProcess')})")
 
     subsection("Hosts File")
     hf = snap.get("HostsFileContent")
@@ -494,7 +501,7 @@ def analyze_windows(snap):
     for v in (snap.get("DotNetVersions") or []):
         ver = v.get("Version", "")
         if ver.startswith(("2.", "3.0", "3.5")):
-            warn(f".NET {v.get('PSChildName')} v{ver} — no AMSI")
+            warn(f".NET {v.get('PSChildName')} v{ver} -- no AMSI")
     subsection("WSL")
     wsl = snap.get("WSLDistributions") or []
     if wsl:
@@ -504,9 +511,9 @@ def analyze_windows(snap):
     subsection("PrintNightmare PointAndPrint")
     pp = first(snap.get("PointAndPrint"))
     if pp and str(pp.get("RestrictDriverInstallationToAdministrators")) == "0":
-        bad("RestrictDriverInstallationToAdministrators=0 — PrintNightmare vulnerable")
+        bad("RestrictDriverInstallationToAdministrators=0 -- PrintNightmare vulnerable")
     if pp and str(pp.get("NoWarningNoElevationOnInstall")) == "1":
-        bad("NoWarningNoElevationOnInstall=1 — PrintNightmare exploitable")
+        bad("NoWarningNoElevationOnInstall=1 -- PrintNightmare exploitable")
 
     # ---- Credential Exposure ----
     section("Credential Exposure", "T1552")
@@ -586,7 +593,7 @@ def analyze_linux(snap):
         elif int(val) >= int(exp):
             good(f"{desc}: {val}")
         else:
-            bad(f"{desc}: {RED(str(val))} (should be ≥{exp})")
+            bad(f"{desc}: {RED(str(val))} (should be >={exp})")
     if kh.get("virtualization") and kh["virtualization"] != "none":
         info(f"Virtualization: {kh['virtualization']}")
 
@@ -789,7 +796,7 @@ def analyze_linux(snap):
     for h in (snap.get("HostsFile") or []):
         ip = h.get("IPAddress", "")
         if ip not in ("127.0.0.1", "::1"):
-            detail(f"{ip} → {', '.join(h.get('Hostnames', []))}")
+            detail(f"{ip} -> {', '.join(h.get('Hostnames', []))}")
 
     # ---- Container & Cloud ----
     section("Container & Cloud", "T1613")
@@ -937,7 +944,7 @@ def main():
                 snap = json.load(open(f, encoding="utf-8", errors="replace"))
                 hostname = os.path.basename(f).replace("system-info_", "").replace(".json", "")
                 platform = "Windows" if is_windows(snap) else "Linux"
-                print(f"  {hostname} ({platform}) — {snap.get('SnapshotTime', '?')}")
+                print(f"  {hostname} ({platform}) -- {snap.get('SnapshotTime', '?')}")
             except Exception as e:
                 print(RED(f"  {f}: {e}"))
     else:

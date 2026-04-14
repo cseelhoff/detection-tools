@@ -1,3 +1,4 @@
 *.json
 *.exe
 __pycache__/
+age-key.txt
