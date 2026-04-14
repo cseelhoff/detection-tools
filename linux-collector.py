@@ -1284,6 +1284,493 @@ def get_pam_config():
 
 
 # ---------------------------------------------------------------------------
+# Kernel Hardening Sysctls
+# ---------------------------------------------------------------------------
+def get_kernel_hardening():
+    sysctls = {
+        "randomize_va_space": "/proc/sys/kernel/randomize_va_space",
+        "kptr_restrict": "/proc/sys/kernel/kptr_restrict",
+        "dmesg_restrict": "/proc/sys/kernel/dmesg_restrict",
+        "ptrace_scope": "/proc/sys/kernel/yama/ptrace_scope",
+        "protected_symlinks": "/proc/sys/fs/protected_symlinks",
+        "protected_hardlinks": "/proc/sys/fs/protected_hardlinks",
+        "perf_event_paranoid": "/proc/sys/kernel/perf_event_paranoid",
+        "mmap_min_addr": "/proc/sys/vm/mmap_min_addr",
+        "unprivileged_userns_clone": "/proc/sys/kernel/unprivileged_userns_clone",
+        "unprivileged_bpf_disabled": "/proc/sys/kernel/unprivileged_bpf_disabled",
+    }
+    result = {}
+    for name, path in sysctls.items():
+        val = read_file_contents(path)
+        if val:
+            result[name] = val.strip()
+
+    # Seccomp
+    for line in read_file_contents("/proc/self/status").splitlines():
+        if line.startswith("Seccomp"):
+            result["seccomp"] = line.split(":", 1)[1].strip()
+
+    # Kernel lockdown
+    lockdown = read_file_contents("/sys/kernel/security/lockdown")
+    if lockdown:
+        result["lockdown"] = lockdown.strip()
+
+    # Virtualization detection
+    virt = run("systemd-detect-virt 2>/dev/null")
+    if virt:
+        result["virtualization"] = virt.strip()
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Container Detection (detailed)
+# ---------------------------------------------------------------------------
+def get_container_info():
+    info = {
+        "inside_container": False,
+        "container_type": "",
+        "container_tools": [],
+        "docker_sockets": [],
+        "k8s_service_account": False,
+    }
+
+    # Detect container type
+    if os.path.exists("/.dockerenv"):
+        info["inside_container"] = True
+        info["container_type"] = "docker"
+    elif os.path.exists("/run/.containerenv"):
+        info["inside_container"] = True
+        info["container_type"] = "podman"
+    container_env = read_file_contents("/run/systemd/container")
+    if container_env:
+        info["inside_container"] = True
+        info["container_type"] = container_env.strip()
+    if os.path.exists("/proc/vz"):
+        info["inside_container"] = True
+        info["container_type"] = "openvz"
+
+    # Container tools present
+    tools = ["docker", "lxc", "rkt", "podman", "runc", "ctr", "containerd",
+             "crio", "nerdctl", "kubectl", "crictl", "docker-compose"]
+    for tool in tools:
+        if run(f"command -v {tool} 2>/dev/null"):
+            info["container_tools"].append(tool)
+
+    # Docker sockets
+    for sock in ["/var/run/docker.sock", "/run/docker.sock",
+                 "/var/run/containerd/containerd.sock"]:
+        if os.path.exists(sock):
+            writable = os.access(sock, os.W_OK)
+            info["docker_sockets"].append({"Path": sock, "Writable": writable})
+
+    # Kubernetes service account
+    k8s_token = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    if os.path.exists(k8s_token):
+        info["k8s_service_account"] = True
+
+    return info
+
+
+# ---------------------------------------------------------------------------
+# Cloud Environment Detection
+# ---------------------------------------------------------------------------
+def get_cloud_environment():
+    cloud = {"provider": "", "detected_via": ""}
+
+    # Check env vars first (fast)
+    for key in os.environ:
+        if key.startswith("AWS_"):
+            cloud["provider"] = "aws"
+            cloud["detected_via"] = "env_var"
+            break
+        if key.startswith("GOOGLE_") or key.startswith("GCE_"):
+            cloud["provider"] = "gcp"
+            cloud["detected_via"] = "env_var"
+            break
+        if key.startswith("AZURE_") or key == "MSI_ENDPOINT":
+            cloud["provider"] = "azure"
+            cloud["detected_via"] = "env_var"
+            break
+
+    # Check known directories
+    if not cloud["provider"]:
+        if os.path.isdir("/var/log/amazon") or os.path.exists("/etc/amazon"):
+            cloud["provider"] = "aws"
+            cloud["detected_via"] = "filesystem"
+        elif os.path.isdir("/var/log/waagent") or os.path.exists("/etc/waagent.conf"):
+            cloud["provider"] = "azure"
+            cloud["detected_via"] = "filesystem"
+        elif os.path.isdir("/etc/google_cloud") or os.path.exists("/usr/share/google"):
+            cloud["provider"] = "gcp"
+            cloud["detected_via"] = "filesystem"
+
+    # Cloud credential files
+    cred_files = []
+    cred_paths = [
+        os.path.expanduser("~/.aws/credentials"),
+        os.path.expanduser("~/.aws/config"),
+        os.path.expanduser("~/.config/gcloud/credentials.db"),
+        os.path.expanduser("~/.config/gcloud/access_tokens.db"),
+        os.path.expanduser("~/.azure/accessTokens.json"),
+        os.path.expanduser("~/.azure/azureProfile.json"),
+    ]
+    for p in cred_paths:
+        if os.path.exists(p):
+            try:
+                st = os.stat(p)
+                cred_files.append({"Path": p, "Size": st.st_size})
+            except Exception:
+                cred_files.append({"Path": p})
+    cloud["credential_files"] = cred_files
+
+    return cloud
+
+
+# ---------------------------------------------------------------------------
+# SSH Configuration & Keys
+# ---------------------------------------------------------------------------
+def get_ssh_config():
+    config = {}
+
+    # sshd_config settings
+    sshd_settings = {}
+    important_keys = [
+        "PermitRootLogin", "PasswordAuthentication", "PermitEmptyPasswords",
+        "PubkeyAuthentication", "AllowAgentForwarding", "X11Forwarding",
+        "MaxAuthTries", "AllowUsers", "AllowGroups", "DenyUsers", "DenyGroups",
+        "UsePAM", "ChallengeResponseAuthentication", "AuthorizedKeysFile",
+    ]
+    sshd_content = read_file_contents("/etc/ssh/sshd_config")
+    for line in sshd_content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        for key in important_keys:
+            if line.lower().startswith(key.lower()):
+                parts = line.split(None, 1)
+                if len(parts) == 2:
+                    sshd_settings[parts[0]] = parts[1]
+    config["SshdSettings"] = sshd_settings
+
+    # SSH host keys
+    host_keys = []
+    for f in glob.glob("/etc/ssh/ssh_host_*_key.pub"):
+        content = read_file_contents(f)
+        if content:
+            host_keys.append({"File": f, "Key": content.strip()})
+    config["HostKeys"] = host_keys
+
+    # SSH agent sockets
+    agent_socks = []
+    for pattern in ["/run/user/*/ssh-agent.*", "/tmp/ssh-*/agent.*"]:
+        for sock in glob.glob(pattern):
+            try:
+                st = os.stat(sock)
+                agent_socks.append({"Path": sock, "UID": st.st_uid})
+            except Exception:
+                pass
+    config["AgentSockets"] = agent_socks
+
+    # TCP wrappers
+    config["HostsAllow"] = read_file_contents("/etc/hosts.allow")
+    config["HostsDeny"] = read_file_contents("/etc/hosts.deny")
+
+    return config
+
+
+# ---------------------------------------------------------------------------
+# File Capabilities
+# ---------------------------------------------------------------------------
+def get_file_capabilities():
+    caps = []
+    output = run("getcap -r / 2>/dev/null", timeout=120)
+    for line in output.splitlines():
+        parts = line.rsplit(" ", 1)
+        if len(parts) == 2:
+            caps.append({"Path": parts[0].strip(), "Capabilities": parts[1].strip()})
+    return caps
+
+
+# ---------------------------------------------------------------------------
+# Writable Critical Paths
+# ---------------------------------------------------------------------------
+def get_writable_critical_paths():
+    results = []
+
+    # Writable dirs in PATH
+    path_dirs = os.environ.get("PATH", "").split(":")
+    for d in path_dirs:
+        if d and os.path.isdir(d) and os.access(d, os.W_OK):
+            results.append({"Type": "PATH_dir", "Path": d})
+
+    # Writable /etc/passwd
+    if os.access("/etc/passwd", os.W_OK):
+        results.append({"Type": "etc_passwd", "Path": "/etc/passwd"})
+
+    # Writable /etc/shadow
+    if os.access("/etc/shadow", os.W_OK):
+        results.append({"Type": "etc_shadow", "Path": "/etc/shadow"})
+
+    # Writable network-scripts (RHEL)
+    ns_dir = "/etc/sysconfig/network-scripts"
+    if os.path.isdir(ns_dir) and os.access(ns_dir, os.W_OK):
+        results.append({"Type": "network_scripts", "Path": ns_dir})
+
+    # ld.so.conf writable paths
+    for conf in ["/etc/ld.so.conf"] + glob.glob("/etc/ld.so.conf.d/*"):
+        content = read_file_contents(conf)
+        for line in content.splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and os.path.isdir(line):
+                if os.access(line, os.W_OK):
+                    results.append({"Type": "ld_so_path", "Path": line, "ConfigFile": conf})
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Deleted-but-Running Executables
+# ---------------------------------------------------------------------------
+def get_deleted_executables():
+    deleted = []
+    for pid_dir in glob.glob("/proc/[0-9]*"):
+        try:
+            exe = os.readlink(os.path.join(pid_dir, "exe"))
+            if "(deleted)" in exe:
+                pid = os.path.basename(pid_dir)
+                cmdline = read_file_contents(os.path.join(pid_dir, "cmdline")).replace("\x00", " ")
+                deleted.append({
+                    "PID": pid,
+                    "DeletedExe": exe,
+                    "CommandLine": cmdline.strip(),
+                })
+        except Exception:
+            pass
+    return deleted
+
+
+# ---------------------------------------------------------------------------
+# Fstab Mount Options
+# ---------------------------------------------------------------------------
+def get_fstab():
+    entries = []
+    for line in read_file_contents("/etc/fstab").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            parts = line.split()
+            if len(parts) >= 4:
+                entries.append({
+                    "Device": parts[0],
+                    "MountPoint": parts[1],
+                    "FsType": parts[2],
+                    "Options": parts[3],
+                })
+    return entries
+
+
+# ---------------------------------------------------------------------------
+# D-Bus Services
+# ---------------------------------------------------------------------------
+def get_dbus_services():
+    services = []
+    output = run("busctl list --no-pager --no-legend 2>/dev/null")
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 5:
+            services.append({
+                "Name": parts[0],
+                "PID": parts[1],
+                "Process": parts[2],
+                "User": parts[3],
+                "Session": parts[4] if len(parts) > 4 else "",
+            })
+    return services
+
+
+# ---------------------------------------------------------------------------
+# Unix Sockets
+# ---------------------------------------------------------------------------
+def get_unix_sockets():
+    sockets = []
+    output = run("ss -xlpH 2>/dev/null")
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 5:
+            path = parts[4] if not parts[4].startswith("*") else ""
+            proc_match = ""
+            for p in parts[5:]:
+                import re as _re
+                m = _re.search(r'users:\(\("([^"]*)",pid=(\d+)', p)
+                if m:
+                    proc_match = f"{m.group(1)}({m.group(2)})"
+                    break
+            sockets.append({
+                "State": parts[0],
+                "Path": path,
+                "Process": proc_match,
+            })
+    return sockets
+
+
+# ---------------------------------------------------------------------------
+# Privileged Group Members
+# ---------------------------------------------------------------------------
+def get_privileged_groups():
+    result = {}
+    for grp in ["sudo", "wheel", "adm", "docker", "lxd", "lxc", "root",
+                "shadow", "disk", "video", "staff", "kmem"]:
+        output = run(f"getent group {grp} 2>/dev/null")
+        if output:
+            parts = output.split(":")
+            if len(parts) >= 4 and parts[3].strip():
+                result[grp] = parts[3].strip().split(",")
+    # UID 0 users
+    uid0 = []
+    for line in read_file_contents("/etc/passwd").splitlines():
+        parts = line.split(":")
+        if len(parts) >= 3 and parts[2] == "0":
+            uid0.append(parts[0])
+    result["uid0_users"] = uid0
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Kerberos Configuration
+# ---------------------------------------------------------------------------
+def get_kerberos_config():
+    config = {}
+    krb5_conf = read_file_contents("/etc/krb5.conf")
+    if krb5_conf:
+        config["krb5_conf"] = krb5_conf
+
+    # Keytab files
+    keytabs = []
+    for pattern in ["/etc/krb5.keytab", "/etc/*.keytab", "/tmp/krb5*"]:
+        for f in glob.glob(pattern):
+            try:
+                st = os.stat(f)
+                keytabs.append({"Path": f, "Size": st.st_size, "Mode": oct(st.st_mode)})
+            except Exception:
+                pass
+    config["keytab_files"] = keytabs
+
+    # Cached AD hashes
+    ad_caches = []
+    for f in ["/var/lib/samba/private/secrets.tdb", "/var/lib/samba/passdb.tdb",
+              "/var/opt/quest/vas/authcache/vas_auth.vdb"]:
+        if os.path.exists(f):
+            ad_caches.append(f)
+    for f in glob.glob("/var/lib/sss/db/cache_*"):
+        ad_caches.append(f)
+    config["ad_hash_caches"] = ad_caches
+
+    return config
+
+
+# ---------------------------------------------------------------------------
+# Attack Tools Present
+# ---------------------------------------------------------------------------
+def get_attack_tools():
+    tools_found = []
+    check_tools = [
+        "nmap", "gcc", "g++", "gdb", "python", "python3", "perl", "ruby",
+        "curl", "wget", "nc", "ncat", "socat", "tcpdump", "tshark", "dumpcap",
+        "strace", "ltrace", "gcore", "john", "hashcat", "hydra", "sqlmap",
+        "msfconsole", "msfvenom", "responder", "impacket-smbserver",
+        "gobuster", "nikto", "wfuzz", "ffuf", "burpsuite",
+    ]
+    for tool in check_tools:
+        path = run(f"command -v {tool} 2>/dev/null")
+        if path:
+            tools_found.append({"Name": tool, "Path": path.strip()})
+    return tools_found
+
+
+# ---------------------------------------------------------------------------
+# Process Environment Variables (all /proc/*/environ)
+# ---------------------------------------------------------------------------
+def get_all_process_env_vars():
+    """Scan /proc/*/environ for sensitive env vars across all processes."""
+    sensitive_patterns = [
+        "PASSWORD", "PASSWD", "SECRET", "TOKEN", "API_KEY", "APIKEY",
+        "AWS_ACCESS", "AWS_SECRET", "PRIVATE_KEY", "CREDENTIAL",
+        "DB_PASS", "DATABASE_URL", "CONN_STR", "CONNECTION_STRING",
+    ]
+    findings = []
+    for pid_dir in glob.glob("/proc/[0-9]*"):
+        environ_path = os.path.join(pid_dir, "environ")
+        content = read_file_contents(environ_path)
+        if not content:
+            continue
+        pid = os.path.basename(pid_dir)
+        for var in content.split("\x00"):
+            if "=" not in var:
+                continue
+            key = var.split("=", 1)[0].upper()
+            for pattern in sensitive_patterns:
+                if pattern in key:
+                    findings.append({
+                        "PID": pid,
+                        "Variable": var.split("=", 1)[0],
+                        # Don't include the value for security - just flag existence
+                    })
+                    break
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# inetd / xinetd legacy services
+# ---------------------------------------------------------------------------
+def get_inetd_services():
+    entries = []
+    for line in read_file_contents("/etc/inetd.conf").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            entries.append({"Source": "/etc/inetd.conf", "Entry": line})
+    xinetd_dir = "/etc/xinetd.d"
+    if os.path.isdir(xinetd_dir):
+        for f in os.listdir(xinetd_dir):
+            fp = os.path.join(xinetd_dir, f)
+            if os.path.isfile(fp):
+                entries.append({"Source": fp, "Entry": read_file_contents(fp)})
+    return entries
+
+
+# ---------------------------------------------------------------------------
+# R-commands trust files
+# ---------------------------------------------------------------------------
+def get_rcommands_trust():
+    trust_files = {}
+    for f in ["/etc/hosts.equiv"]:
+        content = read_file_contents(f)
+        if content:
+            trust_files[f] = content
+    for rhosts in glob.glob("/home/*/.rhosts") + glob.glob("/root/.rhosts"):
+        content = read_file_contents(rhosts)
+        if content:
+            trust_files[rhosts] = content
+    return trust_files
+
+
+# ---------------------------------------------------------------------------
+# Tmux / Screen Sessions
+# ---------------------------------------------------------------------------
+def get_terminal_sessions():
+    sessions = []
+    tmux = run("tmux ls 2>/dev/null")
+    if tmux:
+        for line in tmux.splitlines():
+            sessions.append({"Type": "tmux", "Session": line.strip()})
+    screen = run("screen -ls 2>/dev/null")
+    if screen:
+        for line in screen.splitlines():
+            if ".S." in line or "Attached" in line or "Detached" in line:
+                sessions.append({"Type": "screen", "Session": line.strip()})
+    return sessions
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
@@ -1325,6 +1812,24 @@ def main():
         "FirewallRules": get_firewall_rules(),
         "SecurityModules": get_security_modules(),
         "HostsFile": get_hosts_file(),
+        "EnvironmentVariables": dict(os.environ),
+        "KernelHardening": get_kernel_hardening(),
+        "ContainerInfo": get_container_info(),
+        "CloudEnvironment": get_cloud_environment(),
+        "SshConfig": get_ssh_config(),
+        "FileCapabilities": get_file_capabilities(),
+        "WritableCriticalPaths": get_writable_critical_paths(),
+        "DeletedExecutables": get_deleted_executables(),
+        "Fstab": get_fstab(),
+        "DbusServices": get_dbus_services(),
+        "UnixSockets": get_unix_sockets(),
+        "PrivilegedGroups": get_privileged_groups(),
+        "KerberosConfig": get_kerberos_config(),
+        "AttackTools": get_attack_tools(),
+        "SensitiveProcessEnvVars": get_all_process_env_vars(),
+        "InetdServices": get_inetd_services(),
+        "RcommandsTrust": get_rcommands_trust(),
+        "TerminalSessions": get_terminal_sessions(),
         "CollectionErrors": ERRORS,
     }
 

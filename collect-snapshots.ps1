@@ -671,6 +671,436 @@ public class MftReader
             $fileInventoryErrors = $_.Exception.Message
         }
 
+        # ---- Security-Critical Registry Watchlist ----
+        # Autorunsc already covers persistence (Run, RunOnce, Services, IFEO, AppInit,
+        # Winlogon, Shell extensions, COM/CLSID, LSA, SSP, Print Monitors, Winsock,
+        # WMI subscriptions, Netsh, Boot Execute, Known DLLs, Time Providers, etc.)
+        # This watchlist targets what autorunsc does NOT cover: defense evasion,
+        # credential theft config, remote access settings, and audit/logging tampering.
+        $registryWatchlist = @(
+            # ===== DEFENSE EVASION / SECURITY WEAKENING =====
+            # Windows Defender config + exclusions (attackers add exclusion paths)
+            'HKLM:\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths'
+            'HKLM:\SOFTWARE\Microsoft\Windows Defender\Exclusions\Extensions'
+            'HKLM:\SOFTWARE\Microsoft\Windows Defender\Exclusions\Processes'
+            'HKLM:\SOFTWARE\Microsoft\Windows Defender\Exclusions\IpAddresses'
+            'HKLM:\SOFTWARE\Microsoft\Windows Defender\Real-Time Protection'
+            'HKLM:\SOFTWARE\Microsoft\Windows Defender\SpyNet'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Exclusions'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Reporting'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\SpyNet'
+            # UAC settings (EnableLUA, ConsentPromptBehavior, etc.)
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+            # LSASS protection (RunAsPPL) - prevents credential dumping
+            'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\RunAsPPL'
+            # Credential Guard / Device Guard
+            'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard'
+            'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\LsaCfgFlags'
+            # AMSI providers (removing/replacing disables script scanning)
+            'HKLM:\SOFTWARE\Microsoft\AMSI\Providers'
+            # Firewall policy via GPO
+            'HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile'
+            'HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\StandardProfile'
+            'HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile'
+            'HKLM:\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\DomainProfile'
+            'HKLM:\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile'
+            'HKLM:\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\PublicProfile'
+            # Windows Update (disabling patches)
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
+            # Certificate trust stores (rogue root CAs for MITM)
+            'HKLM:\SOFTWARE\Microsoft\SystemCertificates\Root\Certificates'
+            'HKLM:\SOFTWARE\Policies\Microsoft\SystemCertificates\Root\Certificates'
+            'HKLM:\SOFTWARE\Microsoft\SystemCertificates\AuthRoot\Certificates'
+            'HKLM:\SOFTWARE\Microsoft\SystemCertificates\CA\Certificates'
+            'HKLM:\SOFTWARE\Microsoft\SystemCertificates\Disallowed\Certificates'
+
+            # ===== CREDENTIAL THEFT / AUTHENTICATION =====
+            # WDigest plaintext credential caching (UseLogonCredential = 1)
+            'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest'
+            # CredSSP / credential delegation settings
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CredentialsDelegation'
+            # Kerberos parameters
+            'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters'
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters'
+            # NTLM settings (downgrade, restrict, audit)
+            'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0'
+            # AutoLogon credentials (stored in cleartext in Winlogon)
+            'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+
+            # ===== REMOTE ACCESS SETTINGS =====
+            # RDP (fDenyTSConnections, NLA, security layer)
+            'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server'
+            'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
+            # WinRM (AllowUnencrypted, TrustedHosts, etc.)
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client'
+            # OpenSSH Server config
+            'HKLM:\SOFTWARE\OpenSSH'
+            # SMB settings (signing disabled = relay attacks)
+            'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters'
+            'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters'
+
+            # ===== LOGGING / AUDIT TAMPERING =====
+            # Event log config (shrinking max size, changing retention = hiding tracks)
+            'HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Security'
+            'HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\System'
+            'HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Application'
+            'HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Windows PowerShell'
+            'HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Microsoft-Windows-Sysmon/Operational'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\EventLog\Security'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\EventLog\System'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\EventLog\Application'
+            # PowerShell logging (disabling ScriptBlock/Module/Transcription logging)
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription'
+            # Audit policy via registry
+            'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\AuditPolicy'
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit'
+            # Sysmon service (deleting/disabling = blind spot)
+            'HKLM:\SYSTEM\CurrentControlSet\Services\Sysmon64'
+            'HKLM:\SYSTEM\CurrentControlSet\Services\SysmonDrv'
+
+            # ===== NETWORK =====
+            # DNS client (poisoning via policy)
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient'
+            # Proxy settings (redirecting traffic)
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings'
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings'
+            # TCP/IP parameters (hosts file path, IP forwarding)
+            'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters'
+        )
+
+        $registrySnapshot = New-Object System.Collections.ArrayList
+        $registryErrors = New-Object System.Collections.ArrayList
+        foreach ($regPath in $registryWatchlist) {
+            try {
+                if (-not (Test-Path $regPath)) { continue }
+                $item = Get-Item -Path $regPath -ErrorAction SilentlyContinue
+                if ($null -eq $item) { continue }
+                $values = @{}
+                foreach ($valName in $item.GetValueNames()) {
+                    $valData = $item.GetValue($valName)
+                    $valKind = $item.GetValueKind($valName).ToString()
+                    if ($valData -is [byte[]] -and $valData.Length -gt 512) {
+                        $valData = [Convert]::ToBase64String($valData, 0, 512) + "...(truncated)"
+                    } elseif ($valData -is [byte[]]) {
+                        $valData = [Convert]::ToBase64String($valData)
+                    }
+                    $values[$valName] = [PSCustomObject]@{
+                        Value = $valData
+                        Kind  = $valKind
+                    }
+                }
+                $subkeys = @()
+                try { $subkeys = @($item.GetSubKeyNames()) } catch {}
+                $null = $registrySnapshot.Add([PSCustomObject]@{
+                    Path        = $regPath
+                    Values      = $values
+                    SubkeyCount = $subkeys.Count
+                    Subkeys     = $(if ($subkeys.Count -le 200) { $subkeys } else { $subkeys[0..199] })
+                })
+            } catch {
+                $null = $registryErrors.Add([PSCustomObject]@{
+                    Path  = $regPath
+                    Error = $_.Exception.Message
+                })
+            }
+        }
+        # For keys where each subkey is an individual entry, recurse one level
+        $recurseOneLevel = @(
+            'HKLM:\SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths'
+            'HKLM:\SOFTWARE\Microsoft\Windows Defender\Exclusions\Extensions'
+            'HKLM:\SOFTWARE\Microsoft\Windows Defender\Exclusions\Processes'
+            'HKLM:\SOFTWARE\Microsoft\AMSI\Providers'
+            'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest'
+            'HKLM:\SOFTWARE\Microsoft\SystemCertificates\Root\Certificates'
+        )
+        foreach ($parentPath in $recurseOneLevel) {
+            try {
+                if (-not (Test-Path $parentPath)) { continue }
+                $childKeys = Get-ChildItem -Path $parentPath -ErrorAction SilentlyContinue
+                foreach ($childKey in $childKeys) {
+                    $childValues = @{}
+                    foreach ($valName in $childKey.GetValueNames()) {
+                        $valData = $childKey.GetValue($valName)
+                        $valKind = $childKey.GetValueKind($valName).ToString()
+                        if ($valData -is [byte[]] -and $valData.Length -gt 512) {
+                            $valData = [Convert]::ToBase64String($valData, 0, 512) + "...(truncated)"
+                        } elseif ($valData -is [byte[]]) {
+                            $valData = [Convert]::ToBase64String($valData)
+                        }
+                        $childValues[$valName] = [PSCustomObject]@{
+                            Value = $valData
+                            Kind  = $valKind
+                        }
+                    }
+                    if ($childValues.Count -gt 0) {
+                        $cleanPath = $childKey.PSPath -replace '^Microsoft\.PowerShell\.Core\\Registry::', ''
+                        $null = $registrySnapshot.Add([PSCustomObject]@{
+                            Path        = $cleanPath
+                            Values      = $childValues
+                            SubkeyCount = 0
+                            Subkeys     = @()
+                        })
+                    }
+                }
+            } catch {}
+        }
+
+        # ---- Environment Variables ----
+        $environmentVariables = Get-ChildItem Env: | Select-Object -Property Name, Value
+
+        # ---- Installed Applications ----
+        $installedApps = $null
+        try {
+            $installedApps = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName } |
+                Select-Object -Property DisplayName, DisplayVersion, Publisher, InstallLocation, InstallDate
+        } catch {}
+
+        # ---- Scheduled Tasks (non-Microsoft) ----
+        $scheduledTasks = $null
+        try {
+            $scheduledTasks = Get-ScheduledTask -ErrorAction SilentlyContinue |
+                Where-Object { $_.Author -and $_.Author -notmatch 'Microsoft' -and $_.State -ne 'Disabled' } |
+                Select-Object -Property TaskName, TaskPath, Author, State,
+                    @{N='Actions'; E={($_.Actions | ForEach-Object { $_.Execute }) -join '; '}},
+                    @{N='RunAs'; E={$_.Principal.UserId}}
+        } catch {}
+
+        # ---- Non-Microsoft Services ----
+        $thirdPartyServices = $null
+        try {
+            $thirdPartyServices = Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | ForEach-Object {
+                $svcPath = $_.PathName -replace '"',''
+                $company = ''
+                try {
+                    $vi = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($svcPath)
+                    $company = $vi.CompanyName
+                } catch {}
+                if ($company -and $company -notmatch '^Microsoft') {
+                    [PSCustomObject]@{
+                        Name        = $_.Name
+                        DisplayName = $_.DisplayName
+                        State       = $_.State
+                        StartMode   = $_.StartMode
+                        PathName    = $_.PathName
+                        StartName   = $_.StartName
+                        Company     = $company
+                    }
+                }
+            }
+        } catch {}
+
+        # ---- Non-Microsoft Kernel Drivers ----
+        $thirdPartyDrivers = $null
+        try {
+            $thirdPartyDrivers = Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue | Where-Object { $_.PathName } | ForEach-Object {
+                $drvPath = $_.PathName -replace '\\SystemRoot',"$env:SystemRoot" -replace '^\\\?\?\\',''
+                try {
+                    $vi = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($drvPath)
+                    if ($vi.CompanyName -and $vi.CompanyName -notmatch '^Microsoft') {
+                        [PSCustomObject]@{
+                            Name    = $_.Name
+                            Path    = $drvPath
+                            Company = $vi.CompanyName
+                            Product = $vi.ProductName
+                            Version = $vi.ProductVersion
+                        }
+                    }
+                } catch {}
+            }
+        } catch {}
+
+        # ---- Named Pipes ----
+        $namedPipes = $null
+        try {
+            $namedPipes = [System.IO.Directory]::GetFiles('\\.\pipe\') | ForEach-Object {
+                $pipeName = $_ -replace '^\\\\.\\pipe\\',''
+                [PSCustomObject]@{ Name = $pipeName }
+            }
+        } catch {}
+
+        # ---- Credential Guard / VBS Status (WMI) ----
+        $credentialGuardStatus = $null
+        try {
+            $credentialGuardStatus = Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_DeviceGuard -ErrorAction Stop |
+                Select-Object -Property VirtualizationBasedSecurityStatus, SecurityServicesConfigured, SecurityServicesRunning
+        } catch {}
+
+        # ---- ASR Rules ----
+        $asrRules = $null
+        try {
+            $asrPath = 'HKLM:\SOFTWARE\Microsoft\Windows Defender\Windows Defender Exploit Guard\ASR'
+            $asrEnabled = Get-ItemProperty $asrPath -Name ExploitGuard_ASR_Rules -ErrorAction SilentlyContinue
+            $asrRuleValues = Get-ItemProperty "$asrPath\Rules" -ErrorAction SilentlyContinue
+            $asrExclusions = Get-ItemProperty "$asrPath\ASROnlyExclusions" -ErrorAction SilentlyContinue
+            $asrRules = [PSCustomObject]@{
+                Enabled    = $asrEnabled.ExploitGuard_ASR_Rules
+                Rules      = $asrRuleValues
+                Exclusions = $asrExclusions
+            }
+        } catch {}
+
+        # ---- LAPS Detection ----
+        $lapsInstalled = $null
+        try {
+            $lapsInstalled = [PSCustomObject]@{
+                DllExists    = Test-Path 'C:\Program Files\LAPS\CSE\AdmPwd.dll'
+                PolicyConfig = $(Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft Services\AdmPwd' -ErrorAction SilentlyContinue)
+            }
+        } catch {}
+
+        # ---- AppLocker Effective Policy ----
+        $appLockerPolicy = $null
+        try {
+            $appLockerPolicy = Get-AppLockerPolicy -Effective -Xml -ErrorAction Stop
+        } catch {}
+
+        # ---- WEF (Windows Event Forwarding) ----
+        $wefConfig = $null
+        try {
+            $wefConfig = Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\EventLog\EventForwarding\SubscriptionManager' -ErrorAction SilentlyContinue
+        } catch {}
+
+        # ---- PowerShell Remoting Session Configs ----
+        $psSessionConfigs = $null
+        try {
+            $psSessionConfigs = @('Microsoft.PowerShell','Microsoft.PowerShell.Workflow','Microsoft.PowerShell32') | ForEach-Object {
+                $cfg = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Plugin\$_" -Name ConfigXML -ErrorAction SilentlyContinue
+                if ($cfg) { [PSCustomObject]@{ Plugin = $_; ConfigXML = $cfg.ConfigXML } }
+            }
+        } catch {}
+
+        # ---- AMSI Providers (resolved DLL paths) ----
+        $amsiProviders = $null
+        try {
+            $amsiProviders = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\AMSI\Providers' -ErrorAction SilentlyContinue | ForEach-Object {
+                $clsid = $_.PSChildName
+                $dllPath = ''
+                try { $dllPath = (Get-ItemProperty "HKLM:\SOFTWARE\Classes\CLSID\$clsid\InprocServer32" -ErrorAction Stop).'(Default)' } catch {}
+                [PSCustomObject]@{ CLSID = $clsid; DllPath = $dllPath }
+            }
+        } catch {}
+
+        # ---- Certificates with Private Keys ----
+        $certificates = $null
+        try {
+            $certificates = Get-ChildItem Cert:\LocalMachine\My, Cert:\CurrentUser\My -ErrorAction SilentlyContinue |
+                Select-Object -Property Subject, Issuer, NotAfter, HasPrivateKey, Thumbprint,
+                    @{N='EKU'; E={($_.EnhancedKeyUsageList.FriendlyName) -join ', '}},
+                    @{N='Template'; E={($_.Extensions | Where-Object {$_.Oid.FriendlyName -match 'Template'} | ForEach-Object { $_.Format($false) }) -join ''}}
+        } catch {}
+
+        # ---- Cloud Environment Detection ----
+        $cloudEnvironment = $null
+        try {
+            $cloudEnvironment = [PSCustomObject]@{
+                AWS   = Test-Path 'C:\Program Files\Amazon'
+                Azure = Test-Path 'C:\WindowsAzure'
+                GCP   = Test-Path 'C:\Program Files\Google\Compute Engine'
+            }
+        } catch {}
+
+        # ---- Cached Credentials (cmdkey) ----
+        $cachedCredentials = $null
+        try {
+            $cachedCredentials = & cmdkey /list 2>$null
+        } catch {}
+
+        # ---- AutoLogon Credentials ----
+        $autoLogon = $null
+        try {
+            $autoLogon = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name DefaultUserName, DefaultPassword, DefaultDomainName, AutoAdminLogon, AltDefaultUserName, AltDefaultDomainName -ErrorAction SilentlyContinue
+        } catch {}
+
+        # ---- AlwaysInstallElevated ----
+        $alwaysInstallElevated = $null
+        try {
+            $hklmVal = (Get-ItemProperty 'HKLM:\Software\Policies\Microsoft\Windows\Installer' -Name AlwaysInstallElevated -ErrorAction SilentlyContinue).AlwaysInstallElevated
+            $hkcuVal = (Get-ItemProperty 'HKCU:\Software\Policies\Microsoft\Windows\Installer' -Name AlwaysInstallElevated -ErrorAction SilentlyContinue).AlwaysInstallElevated
+            $alwaysInstallElevated = [PSCustomObject]@{ HKLM = $hklmVal; HKCU = $hkcuVal }
+        } catch {}
+
+        # ---- PrintNightmare Point-and-Print ----
+        $pointAndPrint = $null
+        try {
+            $pointAndPrint = Get-ItemProperty 'HKLM:\Software\Policies\Microsoft\Windows NT\Printers\PointAndPrint' -Name RestrictDriverInstallationToAdministrators, NoWarningNoElevationOnInstall, UpdatePromptSettings -ErrorAction SilentlyContinue
+        } catch {}
+
+        # ---- .NET Versions ----
+        $dotNetVersions = $null
+        try {
+            $dotNetVersions = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP' -Recurse -ErrorAction SilentlyContinue |
+                Get-ItemProperty -Name Version -ErrorAction SilentlyContinue |
+                Where-Object { $_.Version } |
+                Select-Object -Property PSChildName, Version -Unique
+        } catch {}
+
+        # ---- Sysmon Configuration Details ----
+        $sysmonConfig = $null
+        try {
+            $sysmonConfig = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\SysmonDrv\Parameters' -Name HashingAlgorithm, Options -ErrorAction SilentlyContinue
+        } catch {}
+
+        # ---- WSL Distributions ----
+        $wslDistributions = $null
+        try {
+            $wslDistributions = Get-ChildItem 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss' -ErrorAction SilentlyContinue | ForEach-Object {
+                Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue | Select-Object -Property DistributionName, BasePath, State, DefaultUid
+            }
+        } catch {}
+
+        # ---- Container Detection ----
+        $insideContainer = $null
+        try {
+            $insideContainer = (Test-Path "$env:SystemRoot\System32\cexecsvc.exe") -or
+                ($null -ne (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Services\cexecsvc' -ErrorAction SilentlyContinue))
+        } catch {}
+
+        # ---- SAM/SYSTEM Backup Files ----
+        $samBackups = $null
+        try {
+            $samPaths = @(
+                "$env:SystemRoot\repair\SAM","$env:SystemRoot\System32\config\RegBack\SAM",
+                "$env:SystemRoot\repair\SYSTEM","$env:SystemRoot\System32\config\RegBack\SYSTEM"
+            )
+            $samBackups = $samPaths | Where-Object { Test-Path $_ } | ForEach-Object {
+                $f = Get-Item $_
+                [PSCustomObject]@{ Path = $_; Size = $f.Length; LastWriteTime = $f.LastWriteTime }
+            }
+        } catch {}
+
+        # ---- Unattend/GPP Credential Files ----
+        $unattendFiles = $null
+        try {
+            $uaPaths = @(
+                "$env:WINDIR\sysprep\sysprep.xml","$env:WINDIR\Panther\Unattend.xml",
+                "$env:WINDIR\Panther\Unattended.xml","$env:WINDIR\System32\Sysprep\unattend.xml"
+            )
+            $unattendFiles = $uaPaths | Where-Object { Test-Path $_ }
+        } catch {}
+
+        # ---- Printers ----
+        $printers = $null
+        try {
+            $printers = Get-CimInstance Win32_Printer -ErrorAction SilentlyContinue |
+                Select-Object -Property Name, DriverName, PortName, Shared, Published, Network
+        } catch {}
+
+        # ---- Token Privileges ----
+        $tokenPrivileges = $null
+        try {
+            $tokenPrivileges = & whoami /priv /fo csv 2>$null | ConvertFrom-Csv
+        } catch {}
+
         $dateTimeFinished = Get-Date
         [PSCustomObject]@{
             SystemUUID = $systemUUID
@@ -712,6 +1142,35 @@ public class MftReader
             UserExecutables = $userExecutables
             FileInventory = $fileInventory
             FileInventoryErrors = $fileInventoryErrors
+            RegistrySnapshot = $registrySnapshot
+            RegistryErrors = $registryErrors
+            EnvironmentVariables = $environmentVariables
+            InstalledApps = $installedApps
+            ScheduledTasks = $scheduledTasks
+            ThirdPartyServices = $thirdPartyServices
+            ThirdPartyDrivers = $thirdPartyDrivers
+            NamedPipes = $namedPipes
+            CredentialGuardStatus = $credentialGuardStatus
+            ASRRules = $asrRules
+            LAPSInstalled = $lapsInstalled
+            AppLockerPolicy = $appLockerPolicy
+            WEFConfig = $wefConfig
+            PSSessionConfigs = $psSessionConfigs
+            AMSIProviders = $amsiProviders
+            Certificates = $certificates
+            CloudEnvironment = $cloudEnvironment
+            CachedCredentials = $cachedCredentials
+            AutoLogon = $autoLogon
+            AlwaysInstallElevated = $alwaysInstallElevated
+            PointAndPrint = $pointAndPrint
+            DotNetVersions = $dotNetVersions
+            SysmonConfig = $sysmonConfig
+            WSLDistributions = $wslDistributions
+            InsideContainer = $insideContainer
+            SAMBackups = $samBackups
+            UnattendFiles = $unattendFiles
+            Printers = $printers
+            TokenPrivileges = $tokenPrivileges
         }
     }
     $snapshotResults
