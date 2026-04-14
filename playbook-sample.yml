@@ -1,0 +1,146 @@
+# ============================================================================
+# Sample Response Playbook
+# ============================================================================
+# Usage:
+#   .\respond.ps1 -PlaybookPath .\playbook-sample.yml
+#   .\respond.ps1 -PlaybookPath .\playbook-sample.yml -WhatIf      # dry run
+#   .\respond.ps1 -PlaybookPath .\playbook-sample.yml -Force        # skip confirmations
+#
+# Credentials are prompted at runtime — never stored in this file.
+# Rotated passwords are saved to an encrypted file separate from this playbook.
+# ============================================================================
+
+# Credential aliases — the operator will be prompted for each at runtime.
+# The 'username' hint pre-fills the credential prompt.
+credentials:
+  domain-admin:
+    username: admin@domain.mil
+  local-admin:
+    username: Administrator
+  linux-root:
+    username: root
+
+# Variables (reserved for future use)
+variables:
+  quarantine_dir: C:\Quarantine
+
+# ============================================================================
+# Host actions
+# ============================================================================
+hosts:
+
+  # ---------- Windows host: kill malicious process + quarantine malware ----------
+  - host: workstation1.domain.mil
+    credential: domain-admin
+    platform: windows
+    actions:
+      - action: kill-process
+        target: "4832"                    # Kill by PID
+      - action: kill-process
+        target: "malware.exe"             # Kill by name (all instances)
+      - action: quarantine-file
+        target: "C:\\Users\\Public\\malware.exe"
+        params:
+          quarantine_dir: "C:\\Quarantine"
+      - action: collect-file               # Pull a file back to operator machine
+        target: "C:\\Users\\Public\\suspicious.dll"
+        params:
+          local_dir: ".\\collected"
+
+  # ---------- Windows DC: disable compromised accounts + rotate passwords ----------
+  - host: dc01.domain.mil
+    credential: domain-admin
+    platform: windows
+    actions:
+      - action: disable-domain-user
+        target: compromised.user
+      - action: reset-domain-password      # New password auto-generated + saved encrypted
+        target: service.account
+      - action: force-logoff               # Boot all sessions
+        target: compromised.user
+
+  # ---------- Windows host: harden security posture ----------
+  - host: server01.domain.mil
+    credential: domain-admin
+    platform: windows
+    actions:
+      - action: enable-ps-logging          # Enable ScriptBlock + Module + Transcription
+        target: all
+      - action: set-event-log-size         # Increase Security log to 1GB
+        target: Security
+        params:
+          max_size_kb: "1048576"
+      - action: set-audit-policy           # Enable process creation auditing
+        target: "Process Creation"
+        params:
+          setting: both
+      - action: set-audit-policy
+        target: "Logon"
+        params:
+          setting: both
+      - action: registry-set               # Enable command-line in process creation events
+        target: "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\Audit"
+        params:
+          name: ProcessCreationIncludeCmdLine_Enabled
+          data: "1"
+          type: DWord
+
+  # ---------- Windows host: firewall + isolation ----------
+  - host: infected-host.domain.mil
+    credential: domain-admin
+    platform: windows
+    actions:
+      - action: firewall-block             # Block a C2 IP
+        target: "10.99.99.99"
+        params:
+          direction: Outbound
+      - action: isolate-host               # Full network isolation (allow only management)
+        target: "10.0.0.0/24"             # Management subnet
+
+  # ---------- Windows host: persistence removal ----------
+  - host: workstation2.domain.mil
+    credential: domain-admin
+    platform: windows
+    actions:
+      - action: disable-service
+        target: "MaliciousService"
+        params:
+          stop: "true"
+      - action: delete-scheduled-task
+        target: "EvilTask"
+      - action: registry-delete            # Remove a Run key entry
+        target: "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+        params:
+          value_name: "Backdoor"
+      - action: delete-file
+        target: "C:\\Windows\\Temp\\payload.exe"
+
+  # ---------- Linux host: response actions ----------
+  - host: webserver.domain.mil
+    credential: linux-root
+    platform: linux
+    actions:
+      - action: kill-process
+        target: "cryptominer"
+      - action: disable-user
+        target: badactor
+      - action: reset-password             # Auto-generated, saved encrypted
+        target: svc-account
+      - action: quarantine-file
+        target: "/tmp/.hidden/miner"
+        params:
+          quarantine_dir: "/var/quarantine"
+      - action: firewall-block
+        target: "203.0.113.50"
+      - action: disable-service
+        target: "backdoor.service"
+        params:
+          stop: "true"
+      - action: remove-authorized-key      # Remove a specific SSH key fingerprint
+        target: "AAAAB3NzaC1yc2EAAA"
+        params:
+          user: "www-data"
+      - action: set-sysctl                 # Harden kernel
+        target: "kernel.yama.ptrace_scope"
+        params:
+          value: "1"
