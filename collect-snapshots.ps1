@@ -1,8 +1,29 @@
 # check if $creds is defined
 if (-not $creds) {
-    $creds = Get-Credential -UserName 'luke.verlooy@pao.mil'
+    $creds = Get-Credential -UserName 'username@domain.com' -Message "Enter domain credentials (DOMAIN\Username)"
 }
 $targetHosts = (Get-Content -Path '.\targetHosts.txt' -Raw).Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
+
+# Ensure autorunsc.exe is present locally; attempt download if missing
+if (-not (Test-Path '.\autorunsc.exe')) {
+    Write-Host "autorunsc.exe not found locally. Attempting to download from Sysinternals..." -ForegroundColor Yellow
+    try {
+        $zipPath = Join-Path $env:TEMP 'autoruns.zip'
+        $extractPath = Join-Path $env:TEMP 'autoruns_extract'
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri 'https://download.sysinternals.com/files/Autoruns.zip' -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
+        Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        Copy-Item -Path (Join-Path $extractPath 'autorunsc.exe') -Destination '.\autorunsc.exe' -Force
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+        Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "autorunsc.exe downloaded successfully." -ForegroundColor Green
+    } catch {
+        Write-Error "Failed to download autorunsc.exe: $($_.Exception.Message)"
+        Write-Error "Please manually place autorunsc.exe in the working directory and re-run the script."
+        exit 1
+    }
+}
+
 $autorunscScriptBlock = {
     param($targetHost, [pscredential]$creds)
     write-host "targethost: $targetHost"
@@ -125,6 +146,286 @@ $autorunscScriptBlock = {
             }
         }
         $shares = Get-SmbShare | Select-Object -Property Name, Path, ScopeName
+
+        # ---- AV / EDR / Security Product Status ----
+        $securityProducts = New-Object System.Collections.ArrayList
+        # Windows Security Center (WMI) - works on workstations; may not exist on Server Core
+        try {
+            $avProducts = Get-WmiObject -Namespace 'root\SecurityCenter2' -Class AntiVirusProduct -ErrorAction Stop
+            foreach ($av in $avProducts) {
+                $stateHex = '{0:X6}' -f $av.productState
+                # Byte 1 (bits 12-15): product type; Byte 2 (bits 8-11): enabled/disabled; Byte 3 (bits 4-7): definitions status
+                $enabledByte = [int]"0x$($stateHex.Substring(2,2))"
+                $defsByte    = [int]"0x$($stateHex.Substring(4,2))"
+                $null = $securityProducts.Add([PSCustomObject]@{
+                    Type            = 'AntiVirus'
+                    DisplayName     = $av.displayName
+                    InstanceGuid    = $av.instanceGuid
+                    PathToSignedProductExe = $av.pathToSignedProductExe
+                    ProductState    = $av.productState
+                    Enabled         = ($enabledByte -band 0x10) -ne 0
+                    DefinitionsUpToDate = ($defsByte -eq 0x00)
+                })
+            }
+        } catch {}
+        try {
+            $fwProducts = Get-WmiObject -Namespace 'root\SecurityCenter2' -Class FirewallProduct -ErrorAction Stop
+            foreach ($fw in $fwProducts) {
+                $null = $securityProducts.Add([PSCustomObject]@{
+                    Type         = 'Firewall'
+                    DisplayName  = $fw.displayName
+                    InstanceGuid = $fw.instanceGuid
+                    PathToSignedProductExe = $fw.pathToSignedProductExe
+                    ProductState = $fw.productState
+                })
+            }
+        } catch {}
+        try {
+            $asProducts = Get-WmiObject -Namespace 'root\SecurityCenter2' -Class AntiSpywareProduct -ErrorAction Stop
+            foreach ($as in $asProducts) {
+                $null = $securityProducts.Add([PSCustomObject]@{
+                    Type         = 'AntiSpyware'
+                    DisplayName  = $as.displayName
+                    InstanceGuid = $as.instanceGuid
+                    PathToSignedProductExe = $as.pathToSignedProductExe
+                    ProductState = $as.productState
+                })
+            }
+        } catch {}
+        # Windows Defender status (works on both workstation and server)
+        $defenderStatus = $null
+        try {
+            $mpStatus = Get-MpComputerStatus -ErrorAction Stop
+            $defenderStatus = [PSCustomObject]@{
+                AMServiceEnabled              = $mpStatus.AMServiceEnabled
+                AntispywareEnabled            = $mpStatus.AntispywareEnabled
+                AntivirusEnabled              = $mpStatus.AntivirusEnabled
+                BehaviorMonitorEnabled        = $mpStatus.BehaviorMonitorEnabled
+                IoavProtectionEnabled         = $mpStatus.IoavProtectionEnabled
+                NISEnabled                    = $mpStatus.NISEnabled
+                OnAccessProtectionEnabled     = $mpStatus.OnAccessProtectionEnabled
+                RealTimeProtectionEnabled     = $mpStatus.RealTimeProtectionEnabled
+                AntivirusSignatureLastUpdated = $mpStatus.AntivirusSignatureLastUpdated
+                AntivirusSignatureVersion     = $mpStatus.AntivirusSignatureVersion
+                FullScanAge                   = $mpStatus.FullScanAge
+                QuickScanAge                  = $mpStatus.QuickScanAge
+                TamperProtectionSource        = $(try { $mpStatus.TamperProtectionSource } catch { $null })
+                AMRunningMode                 = $(try { $mpStatus.AMRunningMode } catch { $null })
+            }
+        } catch {}
+        # Detect common EDR services
+        $edrServiceNames = @(
+            'CrowdStrike*', 'CSFalcon*',           # CrowdStrike
+            'CarbonBlack*', 'CbDefense*', 'cb',    # Carbon Black
+            'SentinelAgent*', 'SentinelOne*',       # SentinelOne
+            'Tanium*',                              # Tanium
+            'Cylance*',                             # Cylance
+            'McAfee*', 'masvc', 'macmnsvc',         # McAfee
+            'Symantec*', 'SepMaster*', 'ccSvcHst',  # Symantec/Broadcom
+            'YOURSERVICENAME'                       # Placeholder
+        )
+        $edrServices = New-Object System.Collections.ArrayList
+        foreach ($pattern in $edrServiceNames) {
+            try {
+                $svcs = Get-Service -Name $pattern -ErrorAction SilentlyContinue
+                foreach ($svc in $svcs) {
+                    $null = $edrServices.Add([PSCustomObject]@{
+                        ServiceName = $svc.Name
+                        DisplayName = $svc.DisplayName
+                        Status      = $svc.Status.ToString()
+                        StartType   = $svc.StartType.ToString()
+                    })
+                }
+            } catch {}
+        }
+
+        # ---- Firewall Rules ----
+        $firewallProfiles = $null
+        try {
+            $firewallProfiles = Get-NetFirewallProfile | Select-Object -Property Name, Enabled, DefaultInboundAction, DefaultOutboundAction, LogFileName, LogMaxSizeKilobytes, LogAllowed, LogBlocked
+        } catch {}
+        $firewallRules = $null
+        try {
+            $firewallRules = Get-NetFirewallRule | Where-Object { $_.Enabled -eq 'True' } | Select-Object -Property Name, DisplayName, @{Name='Direction'; Expression={$_.Direction.ToString()}}, @{Name='Action'; Expression={$_.Action.ToString()}}, @{Name='Profile'; Expression={$_.Profile.ToString()}}, Enabled, Description
+        } catch {}
+
+        # ---- Logged-in Users / Active Sessions ----
+        $loggedOnUsers = New-Object System.Collections.ArrayList
+        # query user / quser gives console, RDP, and other sessions
+        try {
+            $quserOutput = query user 2>&1
+            foreach ($line in ($quserOutput | Select-Object -Skip 1)) {
+                $lineStr = $line.ToString()
+                if ($lineStr -match '^\s*>?\s*(\S+)\s+(\S+)?\s+(\d+)\s+(Active|Disc)\s+([\d+:\.]+)?\s*(.*)$') {
+                    $null = $loggedOnUsers.Add([PSCustomObject]@{
+                        UserName    = $Matches[1]
+                        SessionName = $Matches[2]
+                        SessionId   = $Matches[3]
+                        State       = $Matches[4]
+                        IdleTime    = $Matches[5]
+                        LogonTime   = $Matches[6].Trim()
+                    })
+                }
+            }
+        } catch {}
+        # WinRM / PSRemoting sessions
+        $winrmSessions = $null
+        try {
+            $winrmSessions = Get-WSManInstance -ResourceURI shell -Enumerate -ErrorAction Stop | Select-Object -Property Owner, ClientIP, ShellId, State, ShellRunTime, ShellInactivity
+        } catch {}
+        # OpenSSH sessions (sshd processes with connected clients)
+        $sshSessions = New-Object System.Collections.ArrayList
+        try {
+            $sshdProcesses = $processInfos | Where-Object { $_.Name -eq 'sshd' }
+            foreach ($sshd in $sshdProcesses) {
+                $sshConn = $tcpConnections | Where-Object { $_.OwningProcess -eq $sshd.Id -and $_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress -ne '::' }
+                foreach ($conn in $sshConn) {
+                    $null = $sshSessions.Add([PSCustomObject]@{
+                        ProcessId     = $sshd.Id
+                        UserName      = $sshd.UserName
+                        RemoteAddress = $conn.RemoteAddress
+                        RemotePort    = $conn.RemotePort
+                        State         = $conn.State
+                    })
+                }
+            }
+        } catch {}
+
+        # ---- Local Security Policy: Security Options + Audit Policies ----
+        $securityOptions = $null
+        $auditPolicies = $null
+        try {
+            $seceditPath = Join-Path $env:TEMP 'secedit_export.inf'
+            $seceditDb = Join-Path $env:TEMP 'secedit_export.sdb'
+            & secedit /export /cfg $seceditPath /quiet 2>$null
+            if (Test-Path $seceditPath) {
+                $secPolicy = Get-Content $seceditPath -Raw
+                # Parse security options from [Registry Values] and [System Access] and [Privilege Rights]
+                $securityOptions = [PSCustomObject]@{
+                    SystemAccess   = @{}
+                    RegistryValues = @{}
+                    PrivilegeRights = @{}
+                }
+                $currentSection = ''
+                foreach ($policyLine in $secPolicy -split "`r?`n") {
+                    if ($policyLine -match '^\[(.+)\]$') {
+                        $currentSection = $Matches[1]
+                        continue
+                    }
+                    if ($policyLine -match '^\s*$' -or $policyLine -match '^\s*;') { continue }
+                    $eqIdx = $policyLine.IndexOf('=')
+                    if ($eqIdx -gt 0) {
+                        $key = $policyLine.Substring(0, $eqIdx).Trim()
+                        $val = $policyLine.Substring($eqIdx + 1).Trim()
+                        switch ($currentSection) {
+                            'System Access'    { $securityOptions.SystemAccess[$key] = $val }
+                            'Registry Values'  { $securityOptions.RegistryValues[$key] = $val }
+                            'Privilege Rights' { $securityOptions.PrivilegeRights[$key] = $val }
+                        }
+                    }
+                }
+                Remove-Item $seceditPath -Force -ErrorAction SilentlyContinue
+                Remove-Item $seceditDb -Force -ErrorAction SilentlyContinue
+            }
+        } catch {}
+        # Advanced Audit Policies (auditpol)
+        try {
+            $auditPolOutput = & auditpol /get /category:* /r 2>$null
+            if ($auditPolOutput) {
+                $auditPolicies = $auditPolOutput | ConvertFrom-Csv | Select-Object -Property 'Subcategory', 'Subcategory GUID', 'Inclusion Setting'
+            }
+        } catch {}
+
+        # ---- Domain Controller Detection + AD Queries ----
+        $isDomainController = $false
+        $domainUsers = $null
+        $domainServiceAccounts = $null
+        $domainGroups = $null
+        $domainComputers = $null
+        $domainGroupMemberships = $null
+        $gpos = $null
+        try {
+            $dcCheck = Get-WmiObject -Class Win32_ComputerSystem -Property DomainRole
+            # DomainRole: 4 = Backup DC, 5 = Primary DC
+            if ($dcCheck.DomainRole -ge 4) {
+                $isDomainController = $true
+            }
+        } catch {}
+        if ($isDomainController) {
+            try {
+                Import-Module ActiveDirectory -ErrorAction Stop
+
+                # Domain Users
+                $domainUsers = Get-ADUser -Filter * -Properties Name, SamAccountName, UserPrincipalName, Enabled, LastLogonDate, PasswordLastSet, PasswordNeverExpires, PasswordExpired, LockedOut, WhenCreated, WhenChanged, MemberOf, Description, DistinguishedName |
+                    Select-Object -Property Name, SamAccountName, UserPrincipalName, Enabled, LastLogonDate, PasswordLastSet, PasswordNeverExpires, PasswordExpired, LockedOut, WhenCreated, WhenChanged, Description, DistinguishedName, @{Name='MemberOf'; Expression={ $_.MemberOf -join ';' }}, @{Name='SID'; Expression={$_.SID.Value}}
+
+                # Managed Service Accounts + Group Managed Service Accounts
+                $domainServiceAccounts = New-Object System.Collections.ArrayList
+                try {
+                    $msas = Get-ADServiceAccount -Filter * -Properties Name, SamAccountName, Enabled, WhenCreated, DistinguishedName, @{Name='SID'; Expression={$_.SID.Value}} -ErrorAction SilentlyContinue
+                    foreach ($msa in $msas) {
+                        $null = $domainServiceAccounts.Add([PSCustomObject]@{
+                            Name              = $msa.Name
+                            SamAccountName    = $msa.SamAccountName
+                            Enabled           = $msa.Enabled
+                            WhenCreated       = $msa.WhenCreated
+                            DistinguishedName = $msa.DistinguishedName
+                            SID               = $msa.SID.Value
+                        })
+                    }
+                } catch {}
+
+                # Domain Groups
+                $domainGroups = Get-ADGroup -Filter * -Properties Name, SamAccountName, @{Name='GroupScope'; Expression={$_.GroupScope.ToString()}}, @{Name='GroupCategory'; Expression={$_.GroupCategory.ToString()}}, WhenCreated, Description, DistinguishedName, @{Name='SID'; Expression={$_.SID.Value}} |
+                    Select-Object -Property Name, SamAccountName, GroupScope, GroupCategory, WhenCreated, Description, DistinguishedName, SID
+
+                # Domain Computers
+                $domainComputers = Get-ADComputer -Filter * -Properties Name, DNSHostName, Enabled, OperatingSystem, OperatingSystemVersion, LastLogonDate, WhenCreated, IPv4Address, DistinguishedName, @{Name='SID'; Expression={$_.SID.Value}} |
+                    Select-Object -Property Name, DNSHostName, Enabled, OperatingSystem, OperatingSystemVersion, LastLogonDate, WhenCreated, IPv4Address, DistinguishedName, SID
+
+                # Group Memberships (all groups -> members)
+                $domainGroupMemberships = New-Object System.Collections.ArrayList
+                $allGroups = Get-ADGroup -Filter * -Properties SamAccountName
+                foreach ($adGroup in $allGroups) {
+                    try {
+                        $groupMembers = Get-ADGroupMember -Identity $adGroup -ErrorAction SilentlyContinue
+                        foreach ($gm in $groupMembers) {
+                            $null = $domainGroupMemberships.Add([PSCustomObject]@{
+                                GroupName          = $adGroup.SamAccountName
+                                GroupDN            = $adGroup.DistinguishedName
+                                MemberName         = $gm.SamAccountName
+                                MemberDN           = $gm.DistinguishedName
+                                MemberObjectClass  = $gm.objectClass
+                                MemberSID          = $gm.SID.Value
+                            })
+                        }
+                    } catch {}
+                }
+
+                # GPOs
+                $gpos = New-Object System.Collections.ArrayList
+                try {
+                    $allGPOs = Get-GPO -All -ErrorAction Stop
+                    foreach ($gpo in $allGPOs) {
+                        $gpoReport = $null
+                        try {
+                            $gpoReport = Get-GPOReport -Guid $gpo.Id -ReportType Xml -ErrorAction Stop
+                        } catch {}
+                        $null = $gpos.Add([PSCustomObject]@{
+                            DisplayName    = $gpo.DisplayName
+                            Id             = $gpo.Id.ToString()
+                            GpoStatus      = $gpo.GpoStatus.ToString()
+                            CreationTime   = $gpo.CreationTime
+                            ModificationTime = $gpo.ModificationTime
+                            WmiFilter      = $gpo.WmiFilter
+                            Description    = $gpo.Description
+                            XmlReport      = $gpoReport
+                        })
+                    }
+                } catch {}
+            } catch {}
+        }
+
         $autorunscPath = Join-Path -Path $env:TEMP -ChildPath '\autorunsc.exe'
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
         $pinfo.FileName = $autorunscPath
@@ -190,6 +491,23 @@ $autorunscScriptBlock = {
             Groups = $groups
             Members = $members
             Shares = $shares
+            SecurityProducts = $securityProducts
+            DefenderStatus = $defenderStatus
+            EDRServices = $edrServices
+            FirewallProfiles = $firewallProfiles
+            FirewallRules = $firewallRules
+            LoggedOnUsers = $loggedOnUsers
+            WinRMSessions = $winrmSessions
+            SSHSessions = $sshSessions
+            SecurityOptions = $securityOptions
+            AuditPolicies = $auditPolicies
+            IsDomainController = $isDomainController
+            DomainUsers = $domainUsers
+            DomainServiceAccounts = $domainServiceAccounts
+            DomainGroups = $domainGroups
+            DomainComputers = $domainComputers
+            DomainGroupMemberships = $domainGroupMemberships
+            GPOs = $gpos
             Autorunsc = $autorunsc_stdout
             AutorunscErrors = $autorunsc_stderr
             UserExecutables = $userExecutables
