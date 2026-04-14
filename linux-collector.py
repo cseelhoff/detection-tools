@@ -16,6 +16,7 @@ import socket
 import datetime
 import re
 import glob
+import hashlib
 from pathlib import Path
 
 ERRORS = []
@@ -472,11 +473,18 @@ def get_users():
         parts = line.split(":")
         if len(parts) >= 9:
             pw = parts[1]
+            # Derive a one-way fingerprint of the password hash for change detection.
+            # SHA-256(shadow_hash) — can't be reversed to recover the original hash,
+            # but is deterministic so it changes when the password changes.
+            pw_fingerprint = ""
+            if pw and pw not in ("!", "!!", "*", ""):
+                pw_fingerprint = hashlib.sha256(pw.encode("utf-8")).hexdigest()
             shadow[parts[0]] = {
                 "PasswordLocked": pw.startswith("!") or pw.startswith("*") or pw == "!!",
                 "PasswordStatus": "locked" if (pw.startswith("!") or pw.startswith("*")) else (
                     "no-password" if pw == "" else "set"
                 ),
+                "PasswordFingerprint": pw_fingerprint,
                 "LastPasswordChangeDays": parts[2],
                 "MinAgeDays": parts[3],
                 "MaxAgeDays": parts[4],
@@ -516,6 +524,7 @@ def get_users():
             user_info.update({
                 "PasswordLocked": shadow[username]["PasswordLocked"],
                 "PasswordStatus": shadow[username]["PasswordStatus"],
+                "PasswordFingerprint": shadow[username]["PasswordFingerprint"],
                 "LastPasswordChangeDays": shadow[username]["LastPasswordChangeDays"],
                 "ExpireDateDays": shadow[username]["ExpireDateDays"],
             })
