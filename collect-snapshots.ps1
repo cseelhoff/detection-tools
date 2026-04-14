@@ -472,6 +472,205 @@ $autorunscScriptBlock = {
         } catch {
             #Write-Host "Error getting files"
         }
+
+        # ---- NTFS MFT File Inventory (WizTree-style fast scan) ----
+        # Reads the Master File Table directly via FSCTL_ENUM_USN_DATA.
+        # This enumerates every file record on the volume in seconds rather
+        # than minutes, because it sequentially scans the MFT instead of
+        # recursively walking directories through the filesystem API.
+        $fileInventory = $null
+        $fileInventoryErrors = ""
+        try {
+            $mftSource = @'
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+
+public class MftReader
+{
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern IntPtr CreateFile(
+        string lpFileName, uint dwDesiredAccess, uint dwShareMode,
+        IntPtr lpSecurityAttributes, uint dwCreationDisposition,
+        uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool DeviceIoControl(
+        IntPtr hDevice, uint dwIoControlCode,
+        ref MFT_ENUM_DATA_V0 lpInBuffer, int nInBufferSize,
+        IntPtr lpOutBuffer, int nOutBufferSize,
+        out int lpBytesReturned, IntPtr lpOverlapped);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr hObject);
+
+    private const uint GENERIC_READ = 0x80000000;
+    private const uint FILE_SHARE_READ = 0x01;
+    private const uint FILE_SHARE_WRITE = 0x02;
+    private const uint OPEN_EXISTING = 3;
+    private const uint FSCTL_ENUM_USN_DATA = 0x000900B3;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MFT_ENUM_DATA_V0
+    {
+        public long StartFileReferenceNumber;
+        public long LowUsn;
+        public long HighUsn;
+    }
+
+    public class FileRecord
+    {
+        public long FileReferenceNumber;
+        public long ParentFileReferenceNumber;
+        public string FileName;
+        public int FileAttributes;
+        public long FileSize;
+        public string FullPath; // resolved after scan
+    }
+
+    public static List<FileRecord> EnumerateVolume(string volumeLetter)
+    {
+        var records = new List<FileRecord>();
+        var dirs = new Dictionary<long, FileRecord>();
+        string volumePath = "\\\\.\\" + volumeLetter + ":";
+
+        IntPtr hVolume = CreateFile(volumePath,
+            GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+        if (hVolume == new IntPtr(-1))
+            throw new Win32Exception(Marshal.GetLastWin32Error(),
+                "Failed to open volume " + volumePath);
+
+        try
+        {
+            int bufferSize = 1024 * 1024; // 1 MB buffer
+            IntPtr buffer = Marshal.AllocHGlobal(bufferSize);
+            try
+            {
+                var mftData = new MFT_ENUM_DATA_V0();
+                mftData.StartFileReferenceNumber = 0;
+                mftData.LowUsn = 0;
+                mftData.HighUsn = long.MaxValue;
+                int bytesReturned;
+
+                while (DeviceIoControl(hVolume, FSCTL_ENUM_USN_DATA,
+                    ref mftData, Marshal.SizeOf(mftData),
+                    buffer, bufferSize, out bytesReturned, IntPtr.Zero))
+                {
+                    int offset = 8; // skip the next USN at start of buffer
+                    while (offset < bytesReturned)
+                    {
+                        // USN_RECORD_V2 layout
+                        int recordLen = Marshal.ReadInt32(buffer, offset);
+                        if (recordLen == 0) break;
+                        long frn = Marshal.ReadInt64(buffer, offset + 8);
+                        long parentFrn = Marshal.ReadInt64(buffer, offset + 16);
+                        int attrs = Marshal.ReadInt32(buffer, offset + 36);
+                        int fnLength = Marshal.ReadInt16(buffer, offset + 56);
+                        int fnOffset = Marshal.ReadInt16(buffer, offset + 58);
+                        string fn = Marshal.PtrToStringUni(
+                            new IntPtr(buffer.ToInt64() + offset + fnOffset), fnLength / 2);
+
+                        // Read file size from the USN record's Reason field area
+                        // (USN records don't contain size; we store 0 and resolve later if needed)
+                        var rec = new FileRecord
+                        {
+                            FileReferenceNumber = frn,
+                            ParentFileReferenceNumber = parentFrn,
+                            FileName = fn,
+                            FileAttributes = attrs,
+                            FileSize = 0
+                        };
+                        records.Add(rec);
+                        if ((attrs & 0x10) != 0) // FILE_ATTRIBUTE_DIRECTORY
+                            dirs[frn] = rec;
+
+                        offset += recordLen;
+                    }
+                    // Next iteration starts from the USN returned at the beginning of the buffer
+                    mftData.StartFileReferenceNumber = Marshal.ReadInt64(buffer, 0);
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+        finally
+        {
+            CloseHandle(hVolume);
+        }
+
+        // Resolve full paths from parent chain (cap depth to prevent infinite loops)
+        var pathCache = new Dictionary<long, string>();
+        foreach (var rec in records)
+        {
+            rec.FullPath = ResolvePath(rec, dirs, pathCache, volumeLetter);
+        }
+        return records;
+    }
+
+    private static string ResolvePath(FileRecord rec,
+        Dictionary<long, FileRecord> dirs,
+        Dictionary<long, string> cache, string vol)
+    {
+        if (cache.ContainsKey(rec.FileReferenceNumber))
+            return cache[rec.FileReferenceNumber];
+
+        var parts = new List<string>();
+        parts.Add(rec.FileName);
+        long current = rec.ParentFileReferenceNumber;
+        int depth = 0;
+        while (current != 0 && depth < 512)
+        {
+            if (cache.ContainsKey(current))
+            {
+                parts.Add(cache[current]);
+                break;
+            }
+            FileRecord parent;
+            if (!dirs.TryGetValue(current, out parent)) break;
+            // FRN 5 is typically the root directory of the volume
+            if (parent.FileReferenceNumber == 5 ||
+                parent.ParentFileReferenceNumber == parent.FileReferenceNumber)
+            {
+                parts.Add(vol + ":");
+                break;
+            }
+            parts.Add(parent.FileName);
+            current = parent.ParentFileReferenceNumber;
+            depth++;
+        }
+        parts.Reverse();
+        string path = string.Join("\\", parts);
+        cache[rec.FileReferenceNumber] = path;
+        return path;
+    }
+}
+'@
+            if (-not ([System.Management.Automation.PSTypeName]'MftReader').Type) {
+                Add-Type -TypeDefinition $mftSource -Language CSharp
+            }
+            # Scan the system drive (typically C:)
+            $systemDriveLetter = $env:SystemDrive.TrimEnd(':')
+            $allRecords = [MftReader]::EnumerateVolume($systemDriveLetter)
+            # Return a lightweight inventory: just files (not directories), with path + attributes
+            $fileInventory = New-Object System.Collections.ArrayList
+            foreach ($rec in $allRecords) {
+                if (($rec.FileAttributes -band 0x10) -eq 0) { # not a directory
+                    $null = $fileInventory.Add([PSCustomObject]@{
+                        FullPath       = $rec.FullPath
+                        FileName       = $rec.FileName
+                        FileAttributes = $rec.FileAttributes
+                    })
+                }
+            }
+        } catch {
+            $fileInventoryErrors = $_.Exception.Message
+        }
+
         $dateTimeFinished = Get-Date
         [PSCustomObject]@{
             SystemUUID = $systemUUID
@@ -511,6 +710,8 @@ $autorunscScriptBlock = {
             Autorunsc = $autorunsc_stdout
             AutorunscErrors = $autorunsc_stderr
             UserExecutables = $userExecutables
+            FileInventory = $fileInventory
+            FileInventoryErrors = $fileInventoryErrors
         }
     }
     $snapshotResults

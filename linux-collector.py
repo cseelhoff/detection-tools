@@ -909,6 +909,66 @@ def get_user_executables():
 
 
 # ---------------------------------------------------------------------------
+# File Inventory (fast full-filesystem scan)
+# Uses 'find' with -printf for a single-pass inode-order scan.
+# On ext4/xfs this reads inode tables sequentially — typically completes
+# in under 30 seconds even for millions of files.
+# ---------------------------------------------------------------------------
+def get_file_inventory():
+    files = []
+    errors = []
+
+    # Get mounted local filesystems (skip network, pseudo, snap, tmpfs)
+    skip_fstypes = {"tmpfs", "devtmpfs", "sysfs", "proc", "cgroup", "cgroup2",
+                    "securityfs", "debugfs", "tracefs", "configfs", "fusectl",
+                    "hugetlbfs", "mqueue", "pstore", "binfmt_misc", "autofs",
+                    "nfs", "nfs4", "cifs", "smbfs", "fuse.sshfs", "squashfs",
+                    "overlay", "devpts", "rpc_pipefs", "nfsd"}
+    mount_points = []
+    for line in read_file_contents("/proc/mounts").splitlines():
+        parts = line.split()
+        if len(parts) >= 3:
+            fstype = parts[2]
+            mountpoint = parts[1]
+            if fstype not in skip_fstypes and mountpoint.startswith("/"):
+                mount_points.append(mountpoint)
+
+    if not mount_points:
+        mount_points = ["/"]
+
+    for mp in mount_points:
+        # -xdev: stay on same filesystem; -printf for minimal stat overhead
+        # Format: size_bytes \t type(f/d/l) \t permissions \t full_path
+        output = run(
+            f"find {mp} -xdev -printf '%s\\t%y\\t%M\\t%p\\n' 2>/dev/null",
+            timeout=120,
+        )
+        if not output:
+            errors.append(f"find returned empty for {mp}")
+            continue
+        for line in output.splitlines():
+            parts = line.split("\t", 3)
+            if len(parts) < 4:
+                continue
+            size_str, ftype, perms, path = parts
+            if ftype == "d":  # skip directories to keep payload smaller
+                continue
+            try:
+                size = int(size_str)
+            except ValueError:
+                size = 0
+            files.append({
+                "Path": path,
+                "Size": size,
+                "Type": ftype,  # f=file, l=symlink, etc.
+                "Permissions": perms,
+                "MountPoint": mp,
+            })
+
+    return files, errors
+
+
+# ---------------------------------------------------------------------------
 # Sudoers Configuration
 # ---------------------------------------------------------------------------
 def get_sudoers():
@@ -1228,6 +1288,7 @@ def get_pam_config():
 # ---------------------------------------------------------------------------
 def main():
     dns_servers, dns_search_suffixes = get_dns_config()
+    file_inventory, file_inventory_errors = get_file_inventory()
 
     snapshot = {
         "SystemUUID": get_system_uuid(),
@@ -1256,6 +1317,8 @@ def main():
         "KernelModules": get_kernel_modules(),
         "InstalledPackages": get_installed_packages(),
         "UserExecutables": get_user_executables(),
+        "FileInventory": file_inventory,
+        "FileInventoryErrors": file_inventory_errors,
         "SudoersConfig": get_sudoers(),
         "SetuidBinaries": get_suid_binaries(),
         "DockerContainers": get_docker_containers(),
