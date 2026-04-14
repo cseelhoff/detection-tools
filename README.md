@@ -235,6 +235,24 @@ Use the provided SQL files:
 - **`sql.sql`** — Autorun frequency analysis (rare = suspicious)
 - **`schema-migration.sql`** — Maintenance scripts
 
+Or run the **offline security analyzer** (PEASS-ng-style) directly against snapshot JSON files:
+
+```bash
+# Analyze all snapshots in current directory
+python analyze-snapshots.py
+
+# Analyze a specific host
+python analyze-snapshots.py system-info_host1.domain.mil.json
+
+# Disable colors (for logging/piping)
+python analyze-snapshots.py --no-color
+
+# Quick summary of all hosts
+python analyze-snapshots.py --summary
+```
+
+This performs ~95% of the checks that winPEAS/linPEAS do (security products, Defender exclusions, ASR rules, credential protection, UAC, privilege escalation vectors, audit policies, logging gaps, firewall, persistence, ACL analysis, credential exposure, etc.) — entirely offline from the JSON snapshots, with colored output and MITRE ATT&CK technique IDs.
+
 ### Step 4: Respond
 
 Create a YAML playbook and execute:
@@ -334,7 +352,8 @@ Registry snapshot, GPOs (XML), AppLocker policy (XML), ASR rules, security optio
 | **Legacy Response** | |
 | `clear.ps1` | Original CSV-driven response script |
 | `clear.csv` | CSV-driven list of remediation actions |
-| **Analysis SQL** | |
+| **Analysis** | |
+| `analyze-snapshots.py` | Offline PEASS-ng-style security analyzer (reads JSON snapshots) |
 | `sql.sql` | Autorun frequency analysis query |
 | `WITH.sql` | Snapshot diff query — new/removed autoruns |
 | `CREATE VIEW system_snapshots_view AS.sql` | Latest snapshot per system |
