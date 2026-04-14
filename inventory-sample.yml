@@ -1,0 +1,59 @@
+# ============================================================================
+# Inventory Configuration
+# ============================================================================
+# This file defines target hosts, credential mappings, and platform settings.
+#
+# Encryption (optional, recommended):
+#   age-keygen -o age-key.txt
+#   sops --encrypt --age <PUBLIC_KEY> inventory.yml > inventory.sops.yml
+#   Then set SOPS_AGE_KEY_FILE=./age-key.txt for unattended decryption.
+#
+# The scripts will try, in order:
+#   1. inventory.sops.yml (encrypted — requires sops + age-key.txt)
+#   2. inventory.yml (plaintext — warns about unencrypted credentials)
+#   3. targetHosts.txt (legacy — single-credential mode, prompts interactively)
+# ============================================================================
+
+# Credential definitions — referenced by name from hosts/groups.
+# Types: winrm, ssh-password, ssh-key
+credentials:
+  domain-admin:
+    type: winrm
+    username: admin@domain.mil
+    password: CHANGE_ME
+  linux-root-key:
+    type: ssh-key
+    username: root
+    key_file: ~/.ssh/id_ed25519
+  linux-svc:
+    type: ssh-password
+    username: svc-account
+    password: CHANGE_ME
+
+# Groups — hosts in a group inherit the group's credential and platform.
+# Hosts can override any group setting.
+groups:
+  windows-servers:
+    credential: domain-admin
+    platform: windows
+  linux-servers:
+    credential: linux-root-key
+    platform: linux
+
+# Host list — each host specifies a group OR explicit credential + platform.
+# Hosts without a credential will prompt interactively at runtime.
+hosts:
+  dc01.domain.mil:
+    group: windows-servers
+  web01.domain.mil:
+    group: windows-servers
+  fileserver.domain.mil:
+    group: windows-servers
+    credential: domain-admin       # explicit override (same as group here)
+  dbserver.domain.mil:
+    group: linux-servers
+  appserver.domain.mil:
+    group: linux-servers
+    credential: linux-svc          # different cred than the group default
+  newhost.domain.mil:
+    platform: linux                # no credential — will prompt at runtime

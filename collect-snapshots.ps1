@@ -1,8 +1,16 @@
-# check if $creds is defined
-if (-not $creds) {
-    $creds = Get-Credential -UserName 'username@domain.com' -Message "Enter domain credentials (DOMAIN\Username)"
+# Load inventory module
+. (Join-Path $PSScriptRoot 'Invoke-Inventory.ps1')
+
+# Load inventory (encrypted, plaintext, or legacy targetHosts.txt)
+$inventoryEntries = Get-Inventory
+$windowsHosts = $inventoryEntries | Where-Object { $_.Platform -eq 'windows' }
+
+# For backward compatibility: build per-host credential lookup
+$hostCredentials = @{}
+foreach ($entry in $windowsHosts) {
+    $hostCredentials[$entry.HostName] = $entry.Credential
 }
-$targetHosts = (Get-Content -Path '.\targetHosts.txt' -Raw).Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
+$targetHosts = $windowsHosts | Select-Object -ExpandProperty HostName
 
 # Ensure autorunsc.exe is present locally; attempt download if missing
 if (-not (Test-Path '.\autorunsc.exe')) {
@@ -1439,6 +1447,7 @@ $maxConcurrentJobs = 10
 
 # Create an array to hold the job objects
 $jobs = @()
+$jobHostMap = @{}  # jobId → hostname
 
 $ReadFromFileScriptBlock = {
     param($targetHost)
@@ -1450,6 +1459,7 @@ $ReadFromFileScriptBlock = {
 $targetHostsCount = $targetHosts.Count
 for ($i = 0; $i -lt $targetHostsCount; $i++) {
     $targetHost = $targetHosts[$i]
+    $hostCred = $hostCredentials[$targetHost]
     write-host "running script on host: $targetHost"
     # If there are 10 or more running jobs, wait for one to finish
     while (($jobs | Where-Object { $_.State -eq 'Running' }).Count -ge $maxConcurrentJobs) {
@@ -1458,19 +1468,45 @@ for ($i = 0; $i -lt $targetHostsCount; $i++) {
         # Remove the finished job from the jobs array
         $jobs = $jobs | Where-Object { $_.Id -ne $finishedJob.Id }
     }
-    # Start a new job
-    $jobs += Start-Job -ScriptBlock $autorunscScriptBlock -ArgumentList @($targetHost, $creds)
+    # Start a new job with per-host credentials
+    $job = Start-Job -ScriptBlock $autorunscScriptBlock -ArgumentList @($targetHost, $hostCred)
+    $jobs += $job
+    $jobHostMap[$job.Id] = $targetHost
     #$jobs += Start-Job -ScriptBlock $ReadFromFileScriptBlock -ArgumentList @($targetHost)
 
     # Update the progress bar
     Write-Progress -Activity "Processing target hosts" -Status "$i of $targetHostsCount completed" -PercentComplete (($i / $targetHostsCount) * 100)
 }
 $jobs | Wait-Job
-$results = $null
-$results = $jobs | Receive-Job
-$resultIndex = 0
-foreach ($result in $results) {
-    
-    $result | ConvertTo-Json -Depth 9 | Out-File -FilePath ".\system-info_$($targetHosts[$resultIndex]).json"
-    $resultIndex += 1
+# Process results, tracking failures for credential feedback
+$failedHosts = @()
+foreach ($job in $jobs) {
+    $hostName = $jobHostMap[$job.Id]
+    if ($job.State -eq 'Failed') {
+        Write-Host "FAILED: $hostName — $($job.ChildJobs[0].JobStateInfo.Reason)" -ForegroundColor Red
+        $failedHosts += $hostName
+        # Mark credential as failed so it won't be auto-saved
+        $credName = ($inventoryEntries | Where-Object { $_.HostName -eq $hostName } | Select-Object -First 1).CredentialName
+        if ($credName) { Set-CredentialFailed -HostName $hostName -CredentialName $credName }
+        continue
+    }
+    try {
+        $result = Receive-Job -Job $job -ErrorAction Stop
+        $result | ConvertTo-Json -Depth 9 | Out-File -FilePath ".\system-info_$($hostName).json"
+        Write-Host "OK: $hostName → system-info_$($hostName).json" -ForegroundColor Green
+    } catch {
+        Write-Host "FAILED: $hostName — $($_.Exception.Message)" -ForegroundColor Red
+        $failedHosts += $hostName
+        $credName = ($inventoryEntries | Where-Object { $_.HostName -eq $hostName } | Select-Object -First 1).CredentialName
+        if ($credName) { Set-CredentialFailed -HostName $hostName -CredentialName $credName }
+    }
 }
+# Summary
+Write-Host "`n=========================================" -ForegroundColor White
+Write-Host " Collection Complete" -ForegroundColor White
+Write-Host "=========================================" -ForegroundColor White
+Write-Host " Succeeded: $($targetHostsCount - $failedHosts.Count) / $targetHostsCount"
+if ($failedHosts.Count -gt 0) {
+    Write-Host " Failed:    $($failedHosts.Count) ($($failedHosts -join ', '))" -ForegroundColor Red
+}
+Write-Host "=========================================" -ForegroundColor White

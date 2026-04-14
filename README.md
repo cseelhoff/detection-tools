@@ -172,36 +172,154 @@ This toolkit automates the full cycle:
 
 ## Prerequisites
 
-- **PowerShell 5.1+** with PSRemoting enabled on target hosts
-- **Domain credentials** with admin access to target hosts
+- **PowerShell 5.1+** with PSRemoting enabled on Windows target hosts
 - **Sysinternals Autorunsc.exe** — placed in the working directory (automatically downloaded if missing)
-- **PostgreSQL** database server
-- **Npgsql.dll** — .NET PostgreSQL driver (GAC-installed or local path)
 - **Python 3.6+** on Linux targets (no dependencies beyond stdlib)
-- **SSH access** to Linux targets (key-based auth recommended)
+- **SSH access** to Linux targets (key-based or password)
+- **PostgreSQL** database server (for storage/analysis)
+- **Npgsql.dll** — .NET PostgreSQL driver (GAC-installed or local path)
+- **sops + age** (optional, recommended) — for encrypted credential storage ([install sops](https://github.com/getsops/sops), [install age](https://github.com/FiloSottile/age))
 - **Python 3 + Flask + Flask-SQLAlchemy** (optional, for the web UI)
 
 ## Configuration
 
-### config.json
+### Inventory & Credentials
 
-Create a `config.json` in the project root:
+The toolkit uses a **YAML inventory file** that replaces the old `targetHosts.txt` with per-host credential support, group-based inheritance, and optional encryption for unattended scheduled runs.
+
+**File resolution order** (scripts auto-discover):
+1. `inventory.sops.yml` — SOPS-encrypted (preferred for production)
+2. `inventory.yml` — plaintext (warns)
+3. `targetHosts.txt` — legacy fallback (single-credential, prompts interactively)
+
+#### Quick Start — Interactive (no setup)
+
+Just list hostnames in `targetHosts.txt` and run. You'll be prompted for credentials:
+
+```
+dc01.domain.mil
+web01.domain.mil
+dbserver.domain.mil
+```
+
+When hosts have no stored credentials, the toolkit asks:
+
+```
+  ┌─────────────────────────────────────────────────┐
+  │  Credentials needed for 3 host(s)               │
+  └─────────────────────────────────────────────────┘
+    - dc01.domain.mil
+    - web01.domain.mil
+    - dbserver.domain.mil
+
+  Options:
+    [1] Enter ONE set of credentials for ALL 3 hosts
+    [2] Enter credentials individually per host
+    [3] Skip these hosts
+  Choice (1/2/3): 1
+
+  Platform for these hosts:
+    [1] Windows (WinRM/PSRemoting)
+    [2] Linux (SSH with password)
+    [3] Linux (SSH with key)
+  Choice (1/2/3): 1
+```
+
+After successful collection, you're asked:
+```
+  Save these credentials for future unattended use? (y/N): y
+  Saved credentials for 3 host(s) to inventory.yml
+```
+
+**Credentials that fail to connect are never saved.**
+
+#### Inventory YAML — Per-Host Credentials
+
+Create `inventory.yml` for multi-credential environments:
+
+```yaml
+credentials:
+  domain-admin:
+    type: winrm
+    username: admin@domain.mil
+    password: MyPassword123
+  linux-root-key:
+    type: ssh-key
+    username: root
+    key_file: ~/.ssh/id_ed25519
+  linux-svc:
+    type: ssh-password
+    username: svc-account
+    password: LinuxPass456
+
+groups:
+  windows-servers:
+    credential: domain-admin
+    platform: windows
+  linux-servers:
+    credential: linux-root-key
+    platform: linux
+
+hosts:
+  dc01.domain.mil:
+    group: windows-servers
+  web01.domain.mil:
+    group: windows-servers
+  dbserver.domain.mil:
+    group: linux-servers
+  appserver.domain.mil:
+    group: linux-servers
+    credential: linux-svc          # override group default
+  newhost.domain.mil:
+    platform: linux                # no credential — prompts at runtime
+```
+
+**Credential inheritance**: host-level `credential` overrides group-level, which overrides interactive prompt.
+
+**Auth types**:
+
+| `type` | Platform | How it connects |
+|---|---|---|
+| `winrm` | Windows | PSCredential → `New-PSSession -ComputerName` |
+| `ssh-password` | Linux | SSH with password |
+| `ssh-key` | Linux | SSH with `-i key_file` |
+
+#### Encrypted Credentials (SOPS + age) — Unattended Runs
+
+For scheduled/automated collection without human interaction, encrypt the inventory with SOPS + age:
+
+```bash
+# 1. Install age and sops (one-time)
+#    https://github.com/FiloSottile/age/releases
+#    https://github.com/getsops/sops/releases
+
+# 2. Generate an age key pair (one-time per operator/machine)
+age-keygen -o age-key.txt
+#   → Public key: age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+
+# 3. Write your inventory in plaintext, then encrypt
+sops --encrypt --age age1ql3z7hjy54pw... inventory.yml > inventory.sops.yml
+
+# 4. Delete the plaintext version
+rm inventory.yml
+
+# 5. For scheduled runs, set the env var pointing to your age key:
+export SOPS_AGE_KEY_FILE=./age-key.txt
+```
+
+The encrypted file is **safe to commit to git** — SOPS only encrypts values, leaving keys visible for review and diffs.
+
+**Multiple operators**: List multiple age public keys as recipients when encrypting — any operator with their private key can decrypt.
+
+**Never commit `age-key.txt`** — add it to `.gitignore`.
+
+### config.json (Database)
 
 ```json
 {
-    "npgsqlPath": "C:\\Windows\\Microsoft.NET\\assembly\\GAC_MSIL\\Npgsql\\v4.0_4.1.14.0__5d8b90d52f46fda7\\Npgsql.dll",
+    "npgsqlPath": "C:\\path\\to\\Npgsql.dll",
     "connectionString": "Host=localhost;Username=postgres;Password=yourpassword;Database=postgres"
 }
-```
-
-### targetHosts.txt
-
-List target hostnames, one per line (used by both Windows and Linux collectors):
-
-```
-host1.domain.mil
-host2.domain.mil
-webserver.domain.mil
 ```
 
 ## Usage — Step by Step
@@ -212,13 +330,20 @@ webserver.domain.mil
 ```powershell
 .\collect-snapshots.ps1
 ```
-Prompts for credentials, PSRemotes into each host (up to 10 concurrent), deploys autorunsc.exe, collects all data, saves `system-info_<hostname>.json`.
+Loads inventory → resolves per-host credentials → PSRemotes into each host (up to 10 concurrent) → deploys autorunsc.exe → collects all data → saves `system-info_<hostname>.json`.
+
+Hosts without stored credentials are prompted interactively with the option to save for future use.
 
 **Linux hosts:**
 ```bash
-SSH_USER=root ./collect-snapshots-linux.sh
+./collect-snapshots-linux.sh
 ```
-SSHes into each host, pipes `linux-collector.py`, saves `system-info_<hostname>.json`.
+Loads inventory → resolves per-host SSH credentials/keys → SSHes into each host → pipes `linux-collector.py` → saves `system-info_<hostname>.json`.
+
+**Legacy mode** (still works):
+```bash
+SSH_USER=root SSH_KEY=~/.ssh/id_rsa ./collect-snapshots-linux.sh
+```
 
 ### Step 2: Import to Database
 
@@ -342,10 +467,14 @@ Registry snapshot, GPOs (XML), AppLocker policy (XML), ASR rules, security optio
 | `import-to-psql.ps1` | Import JSON snapshots into PostgreSQL |
 | `config.json` | Database connection and Npgsql path configuration |
 | `table_definitions.json` | Table column definitions for auto-creating DB schema |
-| `targetHosts.txt` | List of target hostnames |
 | **Core Pipeline — Linux** | |
 | `linux-collector.py` | Python agent that collects Linux system state (piped via SSH) |
 | `collect-snapshots-linux.sh` | Bash orchestrator for parallel SSH collection |
+| **Inventory & Credentials** | |
+| `Invoke-Inventory.ps1` | Shared PowerShell module for inventory loading + credential resolution |
+| `inventory-sample.yml` | Annotated sample inventory with credentials, groups, hosts |
+| `inventory.yml` / `inventory.sops.yml` | Your inventory file (plaintext or SOPS-encrypted) |
+| `targetHosts.txt` | Legacy host list (fallback if no inventory.yml) |
 | **Response Toolkit** | |
 | `respond.ps1` | YAML-playbook-driven response framework (Windows + Linux) |
 | `playbook-sample.yml` | Annotated sample playbook covering all action types |
