@@ -115,7 +115,11 @@ def collect_via_paramiko(host, user, password, script_content, output_file):
         return False
     
     try:
+        # Pass sudo password to collector via env var injection at script start
+        # This avoids putting the password in the command line (visible in ps)
         stdin, stdout, stderr = client.exec_command('python3 -', timeout=600)
+        # Inject the password as an env var before the script runs
+        stdin.write(f'import os; os.environ["COLLECTOR_SUDO_PASS"] = {repr(password)}\n')
         stdin.write(script_content)
         stdin.channel.shutdown_write()
         

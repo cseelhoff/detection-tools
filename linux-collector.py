@@ -37,6 +37,24 @@ def run(cmd, timeout=60):
         return ""
 
 
+def run_sudo(cmd, timeout=60):
+    """Run a command with sudo. Tries sudo -n first, then sudo -S with password from env."""
+    result = run(f"sudo -n {cmd} 2>/dev/null", timeout=timeout)
+    if result:
+        return result
+    sudo_pass = os.environ.get("COLLECTOR_SUDO_PASS", "")
+    if sudo_pass:
+        try:
+            proc = subprocess.run(
+                f"echo '{sudo_pass}' | sudo -S {cmd}",
+                shell=True, capture_output=True, text=True, timeout=timeout
+            )
+            return proc.stdout.strip()
+        except Exception:
+            pass
+    return run(f"{cmd} 2>/dev/null", timeout=timeout)
+
+
 def read_file_contents(path):
     """Read a file and return its contents, or empty string on failure."""
     try:
@@ -269,6 +287,24 @@ def get_dns_config():
             for suffix in line.split()[1:]:
                 search_suffixes.append({"Suffix": suffix})
 
+    # If systemd-resolved is in use (127.0.0.53), get the real upstream servers
+    has_stub = any(s.get("ServerAddress") == "127.0.0.53" for s in servers)
+    if has_stub:
+        resolvectl = run("resolvectl status 2>/dev/null")
+        if not resolvectl:
+            resolvectl = run("systemd-resolve --status 2>/dev/null")
+        if resolvectl:
+            for line in resolvectl.splitlines():
+                line = line.strip()
+                if "DNS Servers:" in line or "DNS Server:" in line:
+                    addr = line.split(":", 1)[1].strip()
+                    if addr and addr != "127.0.0.53":
+                        servers.append({"ServerAddress": addr, "Source": "systemd-resolved"})
+                elif "Current DNS Server:" in line:
+                    addr = line.split(":", 1)[1].strip()
+                    if addr and addr != "127.0.0.53":
+                        servers.append({"ServerAddress": addr, "Source": "systemd-resolved-current"})
+
     return servers, search_suffixes
 
 
@@ -498,8 +534,11 @@ def get_users():
     shadow = {}
     lastlog = {}
 
-    # Parse /etc/shadow for password status
-    for line in read_file_contents("/etc/shadow").splitlines():
+    # Parse /etc/shadow for password status (requires root/sudo)
+    shadow_content = read_file_contents("/etc/shadow")
+    if not shadow_content:
+        shadow_content = run_sudo("cat /etc/shadow")
+    for line in shadow_content.splitlines():
         parts = line.split(":")
         if len(parts) >= 9:
             pw = parts[1]
@@ -1073,23 +1112,23 @@ def get_docker_containers():
 def get_firewall_rules():
     rules = {}
 
-    iptables = run("iptables -L -n -v --line-numbers 2>/dev/null")
+    iptables = run_sudo("iptables -L -n -v --line-numbers")
     if iptables:
         rules["iptables"] = iptables
 
-    ip6tables = run("ip6tables -L -n -v --line-numbers 2>/dev/null")
+    ip6tables = run_sudo("ip6tables -L -n -v --line-numbers")
     if ip6tables:
         rules["ip6tables"] = ip6tables
 
-    nft = run("nft list ruleset 2>/dev/null")
+    nft = run_sudo("nft list ruleset")
     if nft:
         rules["nftables"] = nft
 
-    firewalld = run("firewall-cmd --list-all-zones 2>/dev/null")
+    firewalld = run_sudo("firewall-cmd --list-all-zones")
     if firewalld:
         rules["firewalld"] = firewalld
 
-    ufw = run("ufw status verbose 2>/dev/null")
+    ufw = run_sudo("ufw status verbose")
     if ufw:
         rules["ufw"] = ufw
 

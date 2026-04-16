@@ -221,6 +221,142 @@ foreach ($targetHost in $targetHosts) {
         $tableColumns = $table.columns
         $tableData = $result.$($tableName)
 
+        # ---- Normalize Linux ComputerInfo to match Windows column names ----
+        if ($tableName -eq 'ComputerInfo' -and $null -ne $tableData) {
+            # If it has 'Hostname' but not 'CsName', it's Linux format — remap
+            if ($null -ne $tableData.Hostname -and $null -eq $tableData.CsName) {
+                $tableData = @([PSCustomObject]@{
+                    CsName           = $tableData.Hostname
+                    CsDNSHostName    = $tableData.FQDN
+                    CsDomain         = $tableData.Domain
+                    CsManufacturer   = $tableData.Manufacturer
+                    CsModel          = $tableData.Model
+                    CsPartOfDomain   = [bool]$tableData.Domain
+                    CsPCSystemType   = $tableData.Architecture
+                    OsName           = $tableData.OsName
+                    OsType           = $tableData.OsId
+                    OsVersion        = $tableData.OsVersion
+                    OsSystemDrive    = '/'
+                    OsLastBootUpTime = if ($tableData.LastBootTime) { try { [datetime]::Parse($tableData.LastBootTime) } catch { $null } } else { $null }
+                })
+            }
+        }
+
+        # ---- Normalize Linux Users to match Windows column names + add Linux fields ----
+        if ($tableName -eq 'Users' -and $null -ne $tableData -and @($tableData).Count -gt 0) {
+            $first = @($tableData)[0]
+            if ($null -ne $first.UID -and $null -eq $first.SID) {
+                $flatRows = New-Object System.Collections.ArrayList
+                foreach ($u in $tableData) {
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        Name                = $u.Name
+                        Enabled             = if ($null -ne $u.InteractiveLogin) { $u.InteractiveLogin } else { $true }
+                        LastLogon           = $null
+                        PasswordLastSet     = $null
+                        PrincipalSource     = 'Linux'
+                        SID                 = "$($u.UID)"
+                        UID                 = $u.UID
+                        GID                 = $u.GID
+                        HomeDirectory       = $u.HomeDirectory
+                        Shell               = $u.Shell
+                        PasswordStatus      = $u.PasswordStatus
+                        PasswordFingerprint = $u.PasswordFingerprint
+                        PasswordLocked      = $u.PasswordLocked
+                    })
+                }
+                $tableData = $flatRows
+            }
+        }
+
+        # ---- Normalize Linux EnvironmentVariables (dict -> array of Name,Value) ----
+        if ($tableName -eq 'EnvironmentVariables' -and $null -ne $tableData -and $tableData -is [PSCustomObject]) {
+            # Check if it's a dict (Linux) vs array (Windows)
+            $props = @($tableData.PSObject.Properties | Where-Object { $_.MemberType -eq 'NoteProperty' })
+            if ($props.Count -gt 0 -and $null -eq $tableData.Name) {
+                $flatRows = New-Object System.Collections.ArrayList
+                foreach ($prop in $props) {
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        Name  = $prop.Name
+                        Value = if ($prop.Value -is [string]) { $prop.Value } else { ($prop.Value | ConvertTo-Json -Compress -Depth 2) }
+                    })
+                }
+                $tableData = $flatRows
+            }
+        }
+
+        # ---- Normalize Linux DiskVolumes to match Windows column names ----
+        if ($tableName -eq 'DiskVolumes' -and $null -ne $tableData -and @($tableData).Count -gt 0) {
+            $first = @($tableData)[0]
+            if ($null -ne $first.name -and $null -eq $first.UniqueId) {
+                $flatRows = New-Object System.Collections.ArrayList
+                foreach ($vol in $tableData) {
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        UniqueId        = $vol.uuid
+                        DriveLetter     = $vol.mountpoint
+                        DriveType       = $vol.type
+                        Size            = $vol.size
+                        FileSystemLabel = $vol.name
+                        FileSystem      = $vol.fstype
+                    })
+                }
+                $tableData = $flatRows
+            }
+        }
+
+        # ---- Normalize Linux Members to match Windows column names ----
+        if ($tableName -eq 'Members' -and $null -ne $tableData -and @($tableData).Count -gt 0) {
+            $first = @($tableData)[0]
+            if ($null -ne $first.UserName -and $null -eq $first.UserSID) {
+                $flatRows = New-Object System.Collections.ArrayList
+                foreach ($m in $tableData) {
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        UserSID  = $m.UserName
+                        GroupSID = $m.GroupName
+                    })
+                }
+                $tableData = $flatRows
+            }
+        }
+
+        # ---- Normalize Linux Routes to match Windows column names ----
+        if ($tableName -eq 'Routes' -and $null -ne $tableData -and @($tableData).Count -gt 0) {
+            $first = @($tableData)[0]
+            if ($null -ne $first.Destination -and $null -eq $first.DestinationPrefix) {
+                $flatRows = New-Object System.Collections.ArrayList
+                foreach ($r in $tableData) {
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        InterfaceIndex    = 0
+                        DestinationPrefix = $r.Destination
+                        NextHop           = $r.Gateway
+                        RouteMetric       = $r.Metric
+                    })
+                }
+                $tableData = $flatRows
+            }
+        }
+
+        # ---- Normalize Linux SecurityProducts to match Windows column names ----
+        if ($tableName -eq 'SecurityProducts' -and $null -ne $tableData -and @($tableData).Count -gt 0) {
+            $first = @($tableData)[0]
+            if ($null -ne $first.Name -and $null -eq $first.DisplayName) {
+                $flatRows = New-Object System.Collections.ArrayList
+                foreach ($p in $tableData) {
+                    $enabled = $false
+                    if ($p.ServiceStatus -eq 'active' -or $p.ServiceStatus -eq 'running') { $enabled = $true }
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        Type                   = $p.Type
+                        DisplayName            = $p.Name
+                        InstanceGuid           = $p.ServiceName
+                        PathToSignedProductExe = $p.Version
+                        ProductState           = $null
+                        Enabled                = $enabled
+                        DefinitionsUpToDate    = $null
+                    })
+                }
+                $tableData = $flatRows
+            }
+        }
+
         # ---- Flatten nested structures into row arrays ----
         if ($tableName -eq 'SecurityOptions' -and $null -ne $tableData) {
             # SecurityOptions is { SystemAccess:{k:v}, RegistryValues:{k:v}, PrivilegeRights:{k:v} }
@@ -355,7 +491,9 @@ foreach ($targetHost in $targetHosts) {
             # Collect remaining scalar/blob fields into key-value rows
             $flatRows = New-Object System.Collections.ArrayList
             # IsDomainController
-            $null = $flatRows.Add([PSCustomObject]@{ Key = 'IsDomainController'; Value = $result.IsDomainController.ToString() })
+            if ($null -ne $result.IsDomainController) {
+                $null = $flatRows.Add([PSCustomObject]@{ Key = 'IsDomainController'; Value = $result.IsDomainController.ToString() })
+            }
             # InsideContainer
             if ($null -ne $result.InsideContainer) {
                 $null = $flatRows.Add([PSCustomObject]@{ Key = 'InsideContainer'; Value = $result.InsideContainer.ToString() })
@@ -641,6 +779,64 @@ CREATE TABLE IF NOT EXISTS public.fileinventory (
             Write-Host "  MFT import complete: $rowCount rows in $([math]::Round($sw.Elapsed.TotalSeconds, 1))s ($errorCount parse errors)" -ForegroundColor Green
         } catch {
             Write-Host "  MFT bulk import error: $_" -ForegroundColor Red
+            Write-Host "  ($rowCount rows were loaded before the error)" -ForegroundColor Yellow
+        }
+    }
+
+    # ---- Import Linux FileInventory from JSON (if no CSV but JSON has data) ----
+    if (-not (Test-Path $csvPath) -and $null -ne $result.FileInventory -and @($result.FileInventory).Count -gt 0) {
+        Write-Host "importing Linux file inventory from JSON: $(@($result.FileInventory).Count) entries"
+        # Ensure table exists
+        $createCmd = $connection.CreateCommand()
+        try {
+            $createCmd.CommandText = @"
+CREATE TABLE IF NOT EXISTS public.fileinventory (
+    id BIGSERIAL PRIMARY KEY,
+    snapshotid INTEGER REFERENCES public.systemsnapshots(snapshotid),
+    fullpath TEXT,
+    filename VARCHAR(512),
+    fileattributes INTEGER,
+    filesize BIGINT DEFAULT 0
+)
+"@
+            $null = $createCmd.ExecuteNonQuery()
+            $createCmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_fileinventory_snap ON public.fileinventory(snapshotid)"
+            $null = $createCmd.ExecuteNonQuery()
+            $createCmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_fileinventory_name ON public.fileinventory(filename)"
+            $null = $createCmd.ExecuteNonQuery()
+        } catch {} finally { $createCmd.Dispose() }
+
+        # Delete existing
+        $delCmd = $connection.CreateCommand()
+        try {
+            $delCmd.CommandText = "DELETE FROM public.fileinventory WHERE snapshotid = @sid"
+            $null = $delCmd.Parameters.AddWithValue("@sid", $snapshotID)
+            $deleted = $delCmd.ExecuteNonQuery()
+            if ($deleted -gt 0) { Write-Host "  cleared $deleted existing file inventory rows" }
+        } catch {} finally { $delCmd.Dispose() }
+
+        # Bulk load via COPY
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $rowCount = 0
+        try {
+            $copyCmd = "COPY public.fileinventory (snapshotid, fullpath, filename, fileattributes, filesize) FROM STDIN WITH (FORMAT csv, HEADER false)"
+            $writer = $connection.BeginTextImport($copyCmd)
+            foreach ($fi in $result.FileInventory) {
+                $path = ($fi.Path -replace '"', '""')
+                $fname = [System.IO.Path]::GetFileName($fi.Path) -replace '"', '""'
+                $attrs = 0  # Linux doesn't have Windows file attributes; store permissions as text isn't compatible
+                $size = if ($fi.Size) { $fi.Size } else { 0 }
+                $writer.WriteLine("$snapshotID,`"$path`",`"$fname`",$attrs,$size")
+                $rowCount++
+                if ($rowCount % 50000 -eq 0) {
+                    Write-Host "  loaded $rowCount rows..." -ForegroundColor Gray
+                }
+            }
+            $writer.Dispose()
+            $sw.Stop()
+            Write-Host "  Linux file inventory import complete: $rowCount rows in $([math]::Round($sw.Elapsed.TotalSeconds, 1))s" -ForegroundColor Green
+        } catch {
+            Write-Host "  Linux file inventory bulk import error: $_" -ForegroundColor Red
             Write-Host "  ($rowCount rows were loaded before the error)" -ForegroundColor Yellow
         }
     }

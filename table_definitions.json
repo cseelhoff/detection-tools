@@ -340,6 +340,34 @@
       {
         "name": "SID",
         "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UID",
+        "type": "INTEGER"
+      },
+      {
+        "name": "GID",
+        "type": "INTEGER"
+      },
+      {
+        "name": "HomeDirectory",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Shell",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "PasswordStatus",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "PasswordFingerprint",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "PasswordLocked",
+        "type": "BOOLEAN"
       }
     ]
   },
@@ -1139,7 +1167,7 @@
         "type": "VARCHAR(512)"
       },
       {
-        "name": "Id",
+        "name": "GpoId",
         "type": "VARCHAR(255)"
       },
       {
@@ -1952,7 +1980,7 @@
     "name": "DockerContainers",
     "columns": [
       {
-        "name": "ID",
+        "name": "ContainerId",
         "type": "VARCHAR(255)"
       },
       {
