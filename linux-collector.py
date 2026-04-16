@@ -52,12 +52,42 @@ def read_file_contents(path):
 # ---------------------------------------------------------------------------
 # System UUID
 # ---------------------------------------------------------------------------
-def get_system_uuid():
+def get_system_uuid() -> str:
+    """
+    Get system UUID with multiple fallbacks.
+    Tries to mimic Windows Win32_ComputerSystemProduct.UUID behavior.
+    """
+    uuid = ""
+
+    # 1. Preferred: Direct sysfs (fastest, no extra tools)
     uuid = read_file_contents("/sys/class/dmi/id/product_uuid")
+    
+    # 2. Alternative sysfs path (sometimes used)
+    if not uuid:
+        uuid = read_file_contents("/sys/devices/virtual/dmi/id/product_uuid")
+
+    # 3. dmidecode (most reliable when DMI is available)
     if not uuid:
         uuid = run("dmidecode -s system-uuid 2>/dev/null")
-    return uuid or "unknown"
 
+    # 4. Fallback: systemd machine-id (very common on modern Ubuntu/Debian)
+    #     This is stable per-installation and works great in containers/VMs
+    if not uuid or uuid.lower() in ("", "00000000-0000-0000-0000-000000000000", "not settable"):
+        uuid = read_file_contents("/etc/machine-id")
+        if not uuid:
+            uuid = read_file_contents("/var/lib/dbus/machine-id")
+
+    # 5. Last resort: Generate a random UUID (consistent if you cache it)
+    if not uuid or len(uuid) < 32:
+        uuid = run("uuidgen 2>/dev/null") or "unknown"
+
+    # Clean up (some sources return uppercase with/without dashes)
+    uuid = uuid.replace("-", "").upper()
+    if len(uuid) == 32:
+        # Reformat to standard UUID style for consistency with Windows
+        uuid = f"{uuid[:8]}-{uuid[8:12]}-{uuid[12:16]}-{uuid[16:20]}-{uuid[20:]}"
+    
+    return uuid or "unknown"
 
 # ---------------------------------------------------------------------------
 # Computer Info (equivalent of Get-ComputerInfo)

@@ -574,26 +574,6 @@ finally
     CloseHandle(hVolume);
 }
 
-// Phase 2: Resolve directory paths and write CSV
-// Allowlist: only security-relevant extensions
-var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-    ".exe", ".dll", ".sys", ".drv", ".ocx", ".scr", ".cpl", ".com", ".pif",
-    ".ps1", ".psm1", ".psd1", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse",
-    ".wsh", ".wsf", ".hta", ".sct", ".py", ".sh", ".rb", ".pl",
-    ".xml", ".json", ".yml", ".yaml", ".conf", ".cfg", ".ini", ".inf", ".reg",
-    ".toml", ".env",
-    ".msi", ".msp", ".mst", ".cab",
-    ".log", ".evtx", ".etl",
-    ".lnk", ".url",
-    ".jar", ".class", ".war",
-    ".task", ".job",
-};
-// Directories to skip entirely
-var excludedDirNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
-    "WinSxS", "servicing", "Installer", "SoftwareDistribution",
-    "assembly", "catroot", "catroot2",
-};
-
 var pathCache = new Dictionary<long, string>();
 string rootPath = volumeLetter + ":";
 
@@ -610,23 +590,9 @@ using (var writer = new StreamWriter(csvPath, false, System.Text.Encoding.UTF8))
         int dotIdx = fileName.LastIndexOf('.');
         if (dotIdx < 0) continue;
         string ext = fileName.Substring(dotIdx);
-        if (!allowedExtensions.Contains(ext)) continue;
 
         // Resolve full directory path
         string dirPath = ResolveDirPath(parentFrn, dirNames, dirParents, pathCache, rootPath);
-
-        // Exclude known Windows system directories
-        bool skip = false;
-        foreach (var exDir in excludedDirNames)
-        {
-            if (dirPath.IndexOf("\\" + exDir + "\\", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                dirPath.EndsWith("\\" + exDir, StringComparison.OrdinalIgnoreCase))
-            {
-                skip = true;
-                break;
-            }
-        }
-        if (skip) continue;
 
         string fullPath = dirPath + "\\" + fileName;
 

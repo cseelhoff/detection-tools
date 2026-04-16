@@ -22,7 +22,7 @@ function TableDefinitionToSql($tableName, $columns, $primaryKeys = $null, $forei
     $sql = "CREATE TABLE public.$tableName ("
     $sql += "`n    id SERIAL PRIMARY KEY,"
     $sql += "`n    SnapshotID INTEGER,"
-    $sql += ($columns | ForEach-Object { "`n    $($_.name -replace '[^a-zA-Z0-9]', '') $($_.type)" }) -join ","
+    $sql += ($columns | ForEach-Object { "`n    $($_.name -replace '[^a-zA-Z0-9_]', '') $($_.type)" }) -join ","
     if ($null -ne $primaryKeys -and $primaryKeys.Count -gt 0) {
         $sql += ","
         $sql += "`n    PRIMARY KEY (" + ($primaryKeys -join ", ") + ")"
@@ -220,7 +220,346 @@ foreach ($targetHost in $targetHosts) {
         write-host "importing host data: $targetHost for table name: $tableName"
         $tableColumns = $table.columns
         $tableData = $result.$($tableName)
-        if ($null -ne $tableData -and $tableData.Count -gt 0) {
+
+        # ---- Flatten nested structures into row arrays ----
+        if ($tableName -eq 'SecurityOptions' -and $null -ne $tableData) {
+            # SecurityOptions is { SystemAccess:{k:v}, RegistryValues:{k:v}, PrivilegeRights:{k:v} }
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($section in @('SystemAccess', 'RegistryValues', 'PrivilegeRights')) {
+                $dict = $tableData.$section
+                if ($null -ne $dict) {
+                    foreach ($prop in $dict.PSObject.Properties) {
+                        $null = $flatRows.Add([PSCustomObject]@{
+                            Section      = $section
+                            SettingName  = $prop.Name
+                            SettingValue = if ($prop.Value -is [string]) { $prop.Value } else { ($prop.Value | ConvertTo-Json -Compress -Depth 3) }
+                        })
+                    }
+                }
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'RegistryValues' -and $null -ne $result.RegistrySnapshot) {
+            # RegistrySnapshot is array of { Path, Values:{name:{Value,Kind}}, SubkeyCount, Subkeys }
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($entry in $result.RegistrySnapshot) {
+                if ($null -eq $entry.Values) { continue }
+                foreach ($prop in $entry.Values.PSObject.Properties) {
+                    $valObj = $prop.Value
+                    $valData = if ($valObj -is [PSCustomObject] -and $null -ne $valObj.Value) {
+                        if ($valObj.Value -is [string]) { $valObj.Value -replace "`0", '' } else { ($valObj.Value | ConvertTo-Json -Compress -Depth 3) -replace "`0", '' }
+                    } else { '' }
+                    $valKind = if ($valObj -is [PSCustomObject] -and $valObj.Kind) { $valObj.Kind } else { '' }
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        Path      = $entry.Path
+                        ValueName = $prop.Name
+                        ValueData = $valData
+                        ValueKind = $valKind
+                    })
+                }
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'RecentEvents' -and $null -ne $tableData) {
+            # RecentEvents is { Logon4624:[{TimeCreated,Id,Message}], FailedLogon4625:[...], ... }
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($prop in $tableData.PSObject.Properties) {
+                $category = $prop.Name
+                if ($null -eq $prop.Value) { continue }
+                foreach ($evt in $prop.Value) {
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        Category    = $category
+                        TimeCreated = if ($evt.TimeCreated) { $evt.TimeCreated.ToString() } else { '' }
+                        EventId     = $evt.Id
+                        Message     = $evt.Message
+                    })
+                }
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'PSHistory' -and $null -ne $tableData) {
+            # PSHistory is [{ User, Path, Size, Lines:[] }] — join Lines into text
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($entry in $tableData) {
+                $lines = if ($entry.Lines -is [array]) { $entry.Lines -join "`n" } else { $entry.Lines }
+                $null = $flatRows.Add([PSCustomObject]@{
+                    UserName = $entry.User
+                    Path     = $entry.Path
+                    Size     = $entry.Size
+                    Lines    = $lines
+                })
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'ASRRules' -and $null -ne $tableData) {
+            # ASRRules is { Enabled:int, Rules:{guid:mode,...}, Exclusions:{path:val,...} }
+            $flatRows = New-Object System.Collections.ArrayList
+            $enabled = $tableData.Enabled
+            if ($null -ne $tableData.Rules) {
+                foreach ($prop in $tableData.Rules.PSObject.Properties) {
+                    if ($prop.Name -match '^PS') { continue }
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        Enabled      = $enabled
+                        EntryType    = 'Rule'
+                        SettingKey   = $prop.Name
+                        SettingValue = $prop.Value
+                    })
+                }
+            }
+            if ($null -ne $tableData.Exclusions) {
+                foreach ($prop in $tableData.Exclusions.PSObject.Properties) {
+                    if ($prop.Name -match '^PS') { continue }
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        Enabled      = $enabled
+                        EntryType    = 'Exclusion'
+                        SettingKey   = $prop.Name
+                        SettingValue = $prop.Value
+                    })
+                }
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'LAPSInstalled' -and $null -ne $tableData) {
+            # LAPSInstalled is { DllExists:bool, PolicyConfig:{AdmPwdEnabled:int,...} }
+            $pc = $tableData.PolicyConfig
+            $tableData = @([PSCustomObject]@{
+                DllExists          = $tableData.DllExists
+                AdmPwdEnabled      = if ($pc) { $pc.AdmPwdEnabled } else { $null }
+                PasswordComplexity = if ($pc) { $pc.PasswordComplexity } else { $null }
+                PasswordLength     = if ($pc) { $pc.PasswordLength } else { $null }
+                PasswordAgeDays    = if ($pc) { $pc.PasswordAgeDays } else { $null }
+            })
+        }
+        elseif ($tableName -eq 'AppLockerPolicy' -and $null -ne $result.AppLockerPolicy) {
+            # AppLockerPolicy is a raw XML string — wrap in a single-row object
+            $tableData = @([PSCustomObject]@{
+                PolicyXml = $result.AppLockerPolicy
+            })
+        }
+        elseif ($tableName -eq 'WEFConfig' -and $null -ne $result.WEFConfig) {
+            $tableData = @([PSCustomObject]@{
+                ConfigData = ($result.WEFConfig | ConvertTo-Json -Compress -Depth 3)
+            })
+        }
+        elseif ($tableName -eq 'CachedCredentials' -and $null -ne $result.CachedCredentials) {
+            $text = if ($result.CachedCredentials -is [array]) { $result.CachedCredentials -join "`n" } else { $result.CachedCredentials.ToString() }
+            $tableData = @([PSCustomObject]@{ Output = $text })
+        }
+        elseif ($tableName -eq 'SysmonConfig' -and $null -ne $result.SysmonConfig) {
+            $tableData = @([PSCustomObject]@{
+                HashingAlgorithm = $result.SysmonConfig.HashingAlgorithm
+                Options          = $result.SysmonConfig.Options
+            })
+        }
+        elseif ($tableName -eq 'SnapshotMetadata') {
+            # Collect remaining scalar/blob fields into key-value rows
+            $flatRows = New-Object System.Collections.ArrayList
+            # IsDomainController
+            $null = $flatRows.Add([PSCustomObject]@{ Key = 'IsDomainController'; Value = $result.IsDomainController.ToString() })
+            # InsideContainer
+            if ($null -ne $result.InsideContainer) {
+                $null = $flatRows.Add([PSCustomObject]@{ Key = 'InsideContainer'; Value = $result.InsideContainer.ToString() })
+            }
+            # HostsFileContent
+            if ($result.HostsFileContent) {
+                $null = $flatRows.Add([PSCustomObject]@{ Key = 'HostsFileContent'; Value = $result.HostsFileContent })
+            }
+            # UnattendFiles
+            if ($null -ne $result.UnattendFiles) {
+                $uf = if ($result.UnattendFiles -is [array]) { $result.UnattendFiles -join ';' } else { $result.UnattendFiles.ToString() }
+                $null = $flatRows.Add([PSCustomObject]@{ Key = 'UnattendFiles'; Value = $uf })
+            }
+            # AutorunscErrors
+            if ($result.AutorunscErrors) {
+                $null = $flatRows.Add([PSCustomObject]@{ Key = 'AutorunscErrors'; Value = $result.AutorunscErrors.ToString() })
+            }
+            # FileInventoryCount
+            if ($null -ne $result.FileInventoryCount) {
+                $null = $flatRows.Add([PSCustomObject]@{ Key = 'FileInventoryCount'; Value = $result.FileInventoryCount.ToString() })
+            }
+            # FileInventoryErrors
+            if ($result.FileInventoryErrors) {
+                $null = $flatRows.Add([PSCustomObject]@{ Key = 'FileInventoryErrors'; Value = $result.FileInventoryErrors })
+            }
+            # RegistryErrors
+            if ($null -ne $result.RegistryErrors -and @($result.RegistryErrors).Count -gt 0) {
+                $null = $flatRows.Add([PSCustomObject]@{ Key = 'RegistryErrors'; Value = ($result.RegistryErrors | ConvertTo-Json -Compress -Depth 3) })
+            }
+            # SudoVersion (Linux)
+            if ($result.SudoVersion) {
+                $null = $flatRows.Add([PSCustomObject]@{ Key = 'SudoVersion'; Value = $result.SudoVersion })
+            }
+            $tableData = $flatRows
+        }
+        # ---- Linux nested structure flattening ----
+        elseif ($tableName -eq 'LoggedInUsers' -and $null -ne $tableData) {
+            $flatRows = New-Object System.Collections.ArrayList
+            if ($tableData.ActiveSessions) {
+                foreach ($s in $tableData.ActiveSessions) {
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        SessionType = 'Active'; UserName = $s.UserName; Terminal = $s.Terminal
+                        LoginTime = $s.LoginTime; Source = $s.Source; RemoteAddress = ''
+                        SessionId = ''; State = ''; Service = ''
+                    })
+                }
+            }
+            if ($tableData.SSHConnections) {
+                foreach ($s in $tableData.SSHConnections) {
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        SessionType = 'SSH'; UserName = ''; Terminal = ''
+                        LoginTime = ''; Source = ''; RemoteAddress = $s.RemoteAddress
+                        SessionId = ''; State = ''; Service = ''
+                    })
+                }
+            }
+            if ($tableData.LogindSessions) {
+                foreach ($s in $tableData.LogindSessions) {
+                    $null = $flatRows.Add([PSCustomObject]@{
+                        SessionType = 'Logind'; UserName = $s.Name; Terminal = $s.TTY
+                        LoginTime = ''; Source = $s.RemoteHost; RemoteAddress = $s.RemoteHost
+                        SessionId = $s.SessionId; State = $s.State; Service = $s.Service
+                    })
+                }
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'HostsFile' -and $null -ne $tableData) {
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($entry in $tableData) {
+                $hostnames = if ($entry.Hostnames -is [array]) { $entry.Hostnames -join ' ' } else { $entry.Hostnames }
+                $null = $flatRows.Add([PSCustomObject]@{ IPAddress = $entry.IPAddress; Hostnames = $hostnames })
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'KernelHardening' -and $null -ne $tableData) {
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($prop in $tableData.PSObject.Properties) {
+                $null = $flatRows.Add([PSCustomObject]@{ Setting = $prop.Name; SettingValue = $prop.Value.ToString() })
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'SecurityModules' -and $null -ne $tableData) {
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($prop in $tableData.PSObject.Properties) {
+                $val = if ($prop.Value -is [string]) { $prop.Value } else { ($prop.Value | ConvertTo-Json -Compress -Depth 3) }
+                $null = $flatRows.Add([PSCustomObject]@{ Module = $prop.Name; Status = $val })
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'ContainerInfo' -and $null -ne $tableData) {
+            $tools = if ($tableData.container_tools -is [array]) { $tableData.container_tools -join ',' } else { '' }
+            $sockets = if ($tableData.docker_sockets) { ($tableData.docker_sockets | ConvertTo-Json -Compress -Depth 3) } else { '' }
+            $tableData = @([PSCustomObject]@{
+                InsideContainer = $tableData.inside_container
+                ContainerType = $tableData.container_type
+                ContainerTools = $tools
+                DockerSockets = $sockets
+                K8sServiceAccount = $tableData.k8s_service_account
+            })
+        }
+        elseif ($tableName -eq 'SshConfig' -and $null -ne $tableData) {
+            $flatRows = New-Object System.Collections.ArrayList
+            if ($tableData.SshdSettings) {
+                foreach ($prop in $tableData.SshdSettings.PSObject.Properties) {
+                    $null = $flatRows.Add([PSCustomObject]@{ Section = 'SshdSettings'; SettingKey = $prop.Name; SettingValue = $prop.Value })
+                }
+            }
+            if ($tableData.HostKeys) {
+                foreach ($hk in $tableData.HostKeys) {
+                    $null = $flatRows.Add([PSCustomObject]@{ Section = 'HostKey'; SettingKey = $hk.File; SettingValue = $hk.Key })
+                }
+            }
+            if ($tableData.AgentSockets) {
+                foreach ($as in $tableData.AgentSockets) {
+                    $null = $flatRows.Add([PSCustomObject]@{ Section = 'AgentSocket'; SettingKey = $as.Path; SettingValue = $as.UID.ToString() })
+                }
+            }
+            if ($tableData.HostsAllow) { $null = $flatRows.Add([PSCustomObject]@{ Section = 'TCPWrappers'; SettingKey = 'hosts.allow'; SettingValue = $tableData.HostsAllow }) }
+            if ($tableData.HostsDeny) { $null = $flatRows.Add([PSCustomObject]@{ Section = 'TCPWrappers'; SettingKey = 'hosts.deny'; SettingValue = $tableData.HostsDeny }) }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'PrivilegedGroups' -and $null -ne $tableData) {
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($prop in $tableData.PSObject.Properties) {
+                $members = if ($prop.Value -is [array]) { $prop.Value -join ',' } else { $prop.Value.ToString() }
+                $null = $flatRows.Add([PSCustomObject]@{ GroupName = $prop.Name; Members = $members })
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'KerberosConfig' -and $null -ne $tableData) {
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($prop in $tableData.PSObject.Properties) {
+                $val = if ($prop.Value -is [string]) { $prop.Value } elseif ($prop.Value -is [array]) { ($prop.Value | ConvertTo-Json -Compress -Depth 3) } else { $prop.Value.ToString() }
+                $null = $flatRows.Add([PSCustomObject]@{ SettingKey = $prop.Name; SettingValue = $val })
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'RcommandsTrust' -and $null -ne $tableData) {
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($prop in $tableData.PSObject.Properties) {
+                $null = $flatRows.Add([PSCustomObject]@{ FilePath = $prop.Name; Content = $prop.Value })
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'ShellHistory' -and $null -ne $tableData) {
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($entry in $tableData) {
+                $lines = if ($entry.Last200 -is [array]) { $entry.Last200 -join "`n" } else { $entry.Last200 }
+                $null = $flatRows.Add([PSCustomObject]@{
+                    UserName = $entry.User; File = $entry.File; TotalLines = $entry.TotalLines; Lines = $lines
+                })
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'AuditConfig' -and $null -ne $tableData) {
+            $flatRows = New-Object System.Collections.ArrayList
+            if ($tableData.AuditdStatus) { $null = $flatRows.Add([PSCustomObject]@{ SettingKey = 'AuditdStatus'; SettingValue = $tableData.AuditdStatus }) }
+            if ($tableData.AuditRules) { $null = $flatRows.Add([PSCustomObject]@{ SettingKey = 'AuditRules'; SettingValue = ($tableData.AuditRules -join "`n") }) }
+            if ($tableData.AuditdConfig) {
+                foreach ($prop in $tableData.AuditdConfig.PSObject.Properties) {
+                    $null = $flatRows.Add([PSCustomObject]@{ SettingKey = "AuditdConfig.$($prop.Name)"; SettingValue = $prop.Value })
+                }
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'PamConfig' -and $null -ne $tableData) {
+            $flatRows = New-Object System.Collections.ArrayList
+            if ($tableData.PamFiles) {
+                foreach ($prop in $tableData.PamFiles.PSObject.Properties) {
+                    $val = if ($prop.Value -is [array]) { $prop.Value -join "`n" } else { $prop.Value.ToString() }
+                    $null = $flatRows.Add([PSCustomObject]@{ Section = 'PamFile'; SettingKey = $prop.Name; SettingValue = $val })
+                }
+            }
+            if ($tableData.LoginDefs) {
+                foreach ($prop in $tableData.LoginDefs.PSObject.Properties) {
+                    $null = $flatRows.Add([PSCustomObject]@{ Section = 'LoginDefs'; SettingKey = $prop.Name; SettingValue = $prop.Value })
+                }
+            }
+            $tableData = $flatRows
+        }
+        elseif ($tableName -eq 'CollectionErrors' -and $null -ne $tableData) {
+            if ($tableData -is [string]) {
+                $tableData = @([PSCustomObject]@{ Error = $tableData })
+            } elseif ($tableData -is [array]) {
+                $flatRows = New-Object System.Collections.ArrayList
+                foreach ($err in $tableData) { $null = $flatRows.Add([PSCustomObject]@{ Error = $err.ToString() }) }
+                $tableData = $flatRows
+            }
+        }
+        elseif ($tableName -eq 'FirewallRules' -and $null -ne $tableData -and $tableData -is [PSCustomObject] -and -not ($tableData | Get-Member -Name 'Name' -MemberType NoteProperty)) {
+            # Linux FirewallRules is {iptables:str, nftables:str, ...} — flatten to SnapshotMetadata-style rows
+            # Skip — the Windows array format is handled by the generic path; store Linux as metadata
+            $flatRows = New-Object System.Collections.ArrayList
+            foreach ($prop in $tableData.PSObject.Properties) {
+                $null = $flatRows.Add([PSCustomObject]@{
+                    Name = $prop.Name; DisplayName = $prop.Name; Direction = ''; Action = ''
+                    Profile = ''; Enabled = ''; Description = $prop.Value
+                })
+            }
+            $tableData = $flatRows
+        }
+
+        if ($null -ne $tableData -and @($tableData).Count -gt 0) {
             InsertDataIntoTable $tableName $tableColumns $tableData $snapshotID
         }
     }

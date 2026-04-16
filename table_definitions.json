@@ -1,611 +1,2505 @@
 [
-    {
-        "name": "ComputerInfo",
-        "columns": [
-            {
-                "name": "CsName",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "CsDNSHostName",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "CsDomain",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "CsManufacturer",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "CsModel",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "CsPartOfDomain",
-                "type": "BOOLEAN"
-            },
-            {
-                "name": "CsPCSystemType",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "OsName",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "OsType",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "OsVersion",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "OsSystemDrive",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "OsLastBootUpTime",
-                "type": "TIMESTAMP"
-            }
-        ]
-    },
-    {
-        "name": "DiskVolumes",
-        "columns": [
-            {
-                "name": "UniqueId",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "DriveLetter",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "DriveType",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Size",
-                "type": "BIGINT"
-            },
-            {
-                "name": "FileSystemLabel",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "FileSystem",
-                "type": "VARCHAR(255)"
-            }
-        ]
-    },
-    {
-        "name": "NetAdapters",
-        "columns": [
-            {
-                "name": "MacAddress",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Status",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "PhysicalMediaType",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "InterfaceIndex",
-                "type": "INTEGER"
-            },
-            {
-                "name": "Name",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "InterfaceDescription",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "ConnectionSpecificSuffix",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "RegisterThisConnectionsAddress",
-                "type": "BOOLEAN"
-            }
-        ]
-    },
-    {
-        "name": "IPAddresses",
-        "columns": [
-            {
-                "name": "InterfaceIndex",
-                "type": "INTEGER"
-            },
-            {
-                "name": "IPAddress",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "PrefixLength",
-                "type": "INTEGER"
-            },
-            {
-                "name": "AddressFamily",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Type",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "SkipAsSource",
-                "type": "BOOLEAN"
-            },
-            {
-                "name": "ValidLifetimeTicks",
-                "type": "BIGINT"
-            }
-        ]
-    },
-    {
-        "name": "DnsServers",
-        "columns": [
-            {
-                "name": "InterfaceIndex",
-                "type": "INTEGER"
-            },
-            {
-                "name": "ServerAddress",
-                "type": "VARCHAR(255)"
-            }
-        ]
-    },
-    {
-        "name": "DnsSearchSuffixes",
-        "columns": [
-            {
-                "name": "InterfaceIndex",
-                "type": "INTEGER"
-            },
-            {
-                "name": "SuffixSearch",
-                "type": "VARCHAR(255)"
-            }
-        ]
-    },
-    {
-        "name": "ArpCache",
-        "columns": [
-            {
-                "name": "InterfaceIndex",
-                "type": "INTEGER"
-            },
-            {
-                "name": "IPAddress",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "LinkLayerAddress",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "State",
-                "type": "VARCHAR(255)"
-            }
-        ]
-    },
-    {
-        "name": "Routes",
-        "columns": [
-            {
-                "name": "InterfaceIndex",
-                "type": "INTEGER"
-            },
-            {
-                "name": "DestinationPrefix",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "NextHop",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "RouteMetric",
-                "type": "INTEGER"
-            }
-        ]
-    },
-    {
-        "name": "TcpConnections",
-        "columns": [
-            {
-                "name": "LocalAddress",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "LocalPort",
-                "type": "INTEGER"
-            },
-            {
-                "name": "RemoteAddress",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "RemotePort",
-                "type": "INTEGER"
-            },
-            {
-                "name": "OwningProcess",
-                "type": "INTEGER"
-            },
-            {
-                "name": "CreationTime",
-                "type": "TIMESTAMP"
-            },
-            {
-                "name": "State",
-                "type": "VARCHAR(255)"
-            }
-        ]
-    },
-    {
-        "name": "UdpConnections",
-        "columns": [
-            {
-                "name": "LocalAddress",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "LocalPort",
-                "type": "INTEGER"
-            },
-            {
-                "name": "RemoteAddress",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "RemotePort",
-                "type": "INTEGER"
-            },
-            {
-                "name": "OwningProcess",
-                "type": "INTEGER"
-            },
-            {
-                "name": "CreationTime",
-                "type": "TIMESTAMP"
-            }
-        ]
-    },
-    {
-        "name": "Processes",
-        "columns": [
-            {
-                "name": "ProcessName",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "UserName",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "CreationDate",
-                "type": "TIMESTAMP"
-            },
-            {
-                "name": "ParentProcessId",
-                "type": "INTEGER"
-            },
-            {
-                "name": "ProcessId",
-                "type": "INTEGER"
-            },
-            {
-                "name": "CommandLine",
-                "type": "TEXT"
-            },
-            {
-                "name": "ExecutablePath",
-                "type": "VARCHAR(2048)"
-            }
-        ]
-    },
-    {
-        "name": "Users",
-        "columns": [
-            {
-                "name": "Name",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Enabled",
-                "type": "BOOLEAN"
-            },
-            {
-                "name": "LastLogon",
-                "type": "TIMESTAMP"
-            },
-            {
-                "name": "PasswordLastSet",
-                "type": "TIMESTAMP"
-            },
-            {
-                "name": "PrincipalSource",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "SID",
-                "type": "VARCHAR(255)"
-            }
-        ]
-    },
-    {
-        "name": "Groups",
-        "columns": [
-            {
-                "name": "Name",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "SID",
-                "type": "VARCHAR(255)"
-            }
-        ]
-    },
-    {
+  {
+    "name": "ComputerInfo",
+    "columns": [
+      {
+        "name": "CsName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "CsDNSHostName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "CsDomain",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "CsManufacturer",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "CsModel",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "CsPartOfDomain",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "CsPCSystemType",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "OsName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "OsType",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "OsVersion",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "OsSystemDrive",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "OsLastBootUpTime",
+        "type": "TIMESTAMP"
+      }
+    ]
+  },
+  {
+    "name": "DiskVolumes",
+    "columns": [
+      {
+        "name": "UniqueId",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DriveLetter",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DriveType",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Size",
+        "type": "BIGINT"
+      },
+      {
+        "name": "FileSystemLabel",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "FileSystem",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "NetAdapters",
+    "columns": [
+      {
+        "name": "MacAddress",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Status",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "PhysicalMediaType",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "InterfaceIndex",
+        "type": "INTEGER"
+      },
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "InterfaceDescription",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "ConnectionSpecificSuffix",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "RegisterThisConnectionsAddress",
+        "type": "BOOLEAN"
+      }
+    ]
+  },
+  {
+    "name": "IPAddresses",
+    "columns": [
+      {
+        "name": "InterfaceIndex",
+        "type": "INTEGER"
+      },
+      {
+        "name": "IPAddress",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "PrefixLength",
+        "type": "INTEGER"
+      },
+      {
+        "name": "AddressFamily",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Type",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SkipAsSource",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "ValidLifetimeTicks",
+        "type": "BIGINT"
+      }
+    ]
+  },
+  {
+    "name": "DnsServers",
+    "columns": [
+      {
+        "name": "InterfaceIndex",
+        "type": "INTEGER"
+      },
+      {
+        "name": "ServerAddress",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "DnsSearchSuffixes",
+    "columns": [
+      {
+        "name": "InterfaceIndex",
+        "type": "INTEGER"
+      },
+      {
+        "name": "SuffixSearch",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "ArpCache",
+    "columns": [
+      {
+        "name": "InterfaceIndex",
+        "type": "INTEGER"
+      },
+      {
+        "name": "IPAddress",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "LinkLayerAddress",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "Routes",
+    "columns": [
+      {
+        "name": "InterfaceIndex",
+        "type": "INTEGER"
+      },
+      {
+        "name": "DestinationPrefix",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "NextHop",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "RouteMetric",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "TcpConnections",
+    "columns": [
+      {
+        "name": "LocalAddress",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "LocalPort",
+        "type": "INTEGER"
+      },
+      {
+        "name": "RemoteAddress",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "RemotePort",
+        "type": "INTEGER"
+      },
+      {
+        "name": "OwningProcess",
+        "type": "INTEGER"
+      },
+      {
+        "name": "CreationTime",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "UdpConnections",
+    "columns": [
+      {
+        "name": "LocalAddress",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "LocalPort",
+        "type": "INTEGER"
+      },
+      {
+        "name": "RemoteAddress",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "RemotePort",
+        "type": "INTEGER"
+      },
+      {
+        "name": "OwningProcess",
+        "type": "INTEGER"
+      },
+      {
+        "name": "CreationTime",
+        "type": "TIMESTAMP"
+      }
+    ]
+  },
+  {
+    "name": "Processes",
+    "columns": [
+      {
+        "name": "ProcessName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "CreationDate",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "ParentProcessId",
+        "type": "INTEGER"
+      },
+      {
+        "name": "ProcessId",
+        "type": "INTEGER"
+      },
+      {
+        "name": "CommandLine",
+        "type": "TEXT"
+      },
+      {
+        "name": "ExecutablePath",
+        "type": "VARCHAR(2048)"
+      }
+    ]
+  },
+  {
+    "name": "Users",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Enabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "LastLogon",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "PasswordLastSet",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "PrincipalSource",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SID",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "Groups",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SID",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "Members",
+    "columns": [
+      {
+        "name": "UserSID",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "GroupSID",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "Shares",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Path",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "ScopeName",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "Autorunsc",
+    "columns": [
+      {
+        "name": "Entry Location",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Entry",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Enabled",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Category",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Profile",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Signer",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Company",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Image Path",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Version",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Launch String",
+        "type": "VARCHAR(2047)"
+      },
+      {
+        "name": "MD5",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SHA-1",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "PESHA-1",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "PESHA-256",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SHA-256",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "IMP",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "UserExecutables",
+    "columns": [
+      {
+        "name": "FullName",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Length",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "SecurityProducts",
+    "columns": [
+      {
+        "name": "Type",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DisplayName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "InstanceGuid",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "PathToSignedProductExe",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "ProductState",
+        "type": "INTEGER"
+      },
+      {
+        "name": "Enabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "DefinitionsUpToDate",
+        "type": "BOOLEAN"
+      }
+    ]
+  },
+  {
+    "name": "EDRServices",
+    "columns": [
+      {
+        "name": "ServiceName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DisplayName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Status",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "StartType",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "FirewallRules",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DisplayName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "Direction",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Action",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Profile",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Enabled",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Description",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "LoggedOnUsers",
+    "columns": [
+      {
+        "name": "UserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SessionName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SessionId",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "IdleTime",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "LogonTime",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "InstalledApps",
+    "columns": [
+      {
+        "name": "DisplayName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "DisplayVersion",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Publisher",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "InstallLocation",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "InstallDate",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "ScheduledTasks",
+    "columns": [
+      {
+        "name": "TaskName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "TaskPath",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "Author",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Actions",
+        "type": "TEXT"
+      },
+      {
+        "name": "RunAs",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "ThirdPartyServices",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DisplayName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "StartMode",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "PathName",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "StartName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Company",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "ThirdPartyDrivers",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Company",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Product",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Version",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "NamedPipes",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(512)"
+      }
+    ]
+  },
+  {
+    "name": "Certificates",
+    "columns": [
+      {
+        "name": "Subject",
+        "type": "TEXT"
+      },
+      {
+        "name": "Issuer",
+        "type": "TEXT"
+      },
+      {
+        "name": "NotAfter",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "HasPrivateKey",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "Thumbprint",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "EKU",
+        "type": "TEXT"
+      },
+      {
+        "name": "Template",
+        "type": "VARCHAR(512)"
+      }
+    ]
+  },
+  {
+    "name": "InstalledHotfixes",
+    "columns": [
+      {
+        "name": "HotFixID",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Description",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "InstalledOn",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "InstalledBy",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "MappedDrives",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "ProviderName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "SessionID",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Size",
+        "type": "BIGINT"
+      },
+      {
+        "name": "FreeSpace",
+        "type": "BIGINT"
+      }
+    ]
+  },
+  {
+    "name": "ServiceBinaryAcls",
+    "columns": [
+      {
+        "name": "ServiceName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "BinaryPath",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Owner",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SDDL",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "NamedPipeAcls",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "SDDL",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "FirewallProfiles",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Enabled",
+        "type": "INTEGER"
+      },
+      {
+        "name": "DefaultInboundAction",
+        "type": "INTEGER"
+      },
+      {
+        "name": "DefaultOutboundAction",
+        "type": "INTEGER"
+      },
+      {
+        "name": "LogFileName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "LogMaxSizeKilobytes",
+        "type": "INTEGER"
+      },
+      {
+        "name": "LogAllowed",
+        "type": "INTEGER"
+      },
+      {
+        "name": "LogBlocked",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "WinRMSessions",
+    "columns": [
+      {
+        "name": "Owner",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "ClientIP",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "ShellId",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "ShellRunTime",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "ShellInactivity",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "SSHSessions",
+    "columns": [
+      {
+        "name": "ProcessId",
+        "type": "INTEGER"
+      },
+      {
+        "name": "UserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "RemoteAddress",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "RemotePort",
+        "type": "INTEGER"
+      },
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "AuditPolicies",
+    "columns": [
+      {
+        "name": "Subcategory",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Subcategory GUID",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Inclusion Setting",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "DomainUsers",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SamAccountName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UserPrincipalName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "Enabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "LastLogonDate",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "PasswordLastSet",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "PasswordNeverExpires",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "PasswordExpired",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "LockedOut",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "WhenCreated",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "WhenChanged",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "Description",
+        "type": "TEXT"
+      },
+      {
+        "name": "DistinguishedName",
+        "type": "TEXT"
+      },
+      {
+        "name": "MemberOf",
+        "type": "TEXT"
+      },
+      {
+        "name": "SID",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "DomainServiceAccounts",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SamAccountName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Enabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "WhenCreated",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "DistinguishedName",
+        "type": "TEXT"
+      },
+      {
+        "name": "SID",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "DomainGroups",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SamAccountName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "GroupScope",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "GroupCategory",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "WhenCreated",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "Description",
+        "type": "TEXT"
+      },
+      {
+        "name": "DistinguishedName",
+        "type": "TEXT"
+      },
+      {
+        "name": "SID",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "DomainComputers",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DNSHostName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "Enabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "OperatingSystem",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "OperatingSystemVersion",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "LastLogonDate",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "WhenCreated",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "IPv4Address",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DistinguishedName",
+        "type": "TEXT"
+      },
+      {
+        "name": "SID",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "DomainGroupMemberships",
+    "columns": [
+      {
+        "name": "GroupName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "GroupDN",
+        "type": "TEXT"
+      },
+      {
+        "name": "MemberName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "MemberDN",
+        "type": "TEXT"
+      },
+      {
+        "name": "MemberObjectClass",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "MemberSID",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "GPOs",
+    "columns": [
+      {
+        "name": "DisplayName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "Id",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "GpoStatus",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "CreationTime",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "ModificationTime",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "WmiFilter",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "Description",
+        "type": "TEXT"
+      },
+      {
+        "name": "XmlReport",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "EnvironmentVariables",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Value",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "TokenPrivileges",
+    "columns": [
+      {
+        "name": "Privilege Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Description",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "DnsCache",
+    "columns": [
+      {
+        "name": "Entry",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "RecordName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "RecordType",
+        "type": "INTEGER"
+      },
+      {
+        "name": "Status",
+        "type": "INTEGER"
+      },
+      {
+        "name": "Data",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "TimeToLive",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "SavedRdpConnections",
+    "columns": [
+      {
+        "name": "Server",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UsernameHint",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "PuttySessions",
+    "columns": [
+      {
+        "name": "SessionName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "HostName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "PortNumber",
+        "type": "INTEGER"
+      },
+      {
+        "name": "Protocol",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "ProxyHost",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "WifiProfiles",
+    "columns": [
+      {
+        "name": "SSID",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "DPAPIKeys",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "LastWriteTime",
+        "type": "TIMESTAMP"
+      },
+      {
+        "name": "Length",
+        "type": "BIGINT"
+      }
+    ]
+  },
+  {
+    "name": "SAMBackups",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Size",
+        "type": "BIGINT"
+      },
+      {
+        "name": "LastWriteTime",
+        "type": "TIMESTAMP"
+      }
+    ]
+  },
+  {
+    "name": "Printers",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DriverName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "PortName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Shared",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "Published",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "Network",
+        "type": "BOOLEAN"
+      }
+    ]
+  },
+  {
+    "name": "DotNetVersions",
+    "columns": [
+      {
+        "name": "PSChildName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Version",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "AMSIProviders",
+    "columns": [
+      {
+        "name": "CLSID",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DllPath",
+        "type": "VARCHAR(2048)"
+      }
+    ]
+  },
+  {
+    "name": "PSSessionConfigs",
+    "columns": [
+      {
+        "name": "Plugin",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "ConfigXML",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "TaskBinaryAcls",
+    "columns": [
+      {
+        "name": "TaskName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "TaskPath",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "BinaryPath",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "RunAs",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Owner",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SDDL",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "PathDirAcls",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Owner",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SDDL",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "ShareAcls",
+    "columns": [
+      {
+        "name": "ShareName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      }
+    ]
+  },
+  {
+    "name": "HomeDirAcls",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Owner",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SDDL",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "WSLDistributions",
+    "columns": [
+      {
+        "name": "DistributionName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "BasePath",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "State",
+        "type": "INTEGER"
+      },
+      {
+        "name": "DefaultUid",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "DefenderStatus",
+    "columns": [
+      {
+        "name": "AMServiceEnabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "AntispywareEnabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "AntivirusEnabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "BehaviorMonitorEnabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "IoavProtectionEnabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "NISEnabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "OnAccessProtectionEnabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "RealTimeProtectionEnabled",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "AntivirusSignatureLastUpdated",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "AntivirusSignatureVersion",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "FullScanAge",
+        "type": "BIGINT"
+      },
+      {
+        "name": "QuickScanAge",
+        "type": "BIGINT"
+      },
+      {
+        "name": "TamperProtectionSource",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "AMRunningMode",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "CredentialGuardStatus",
+    "columns": [
+      {
+        "name": "VirtualizationBasedSecurityStatus",
+        "type": "INTEGER"
+      },
+      {
+        "name": "SecurityServicesConfigured",
+        "type": "TEXT"
+      },
+      {
+        "name": "SecurityServicesRunning",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "CloudEnvironment",
+    "columns": [
+      {
+        "name": "AWS",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "Azure",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "GCP",
+        "type": "BOOLEAN"
+      }
+    ]
+  },
+  {
+    "name": "AutoLogon",
+    "columns": [
+      {
+        "name": "DefaultUserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DefaultPassword",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DefaultDomainName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "AutoAdminLogon",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "AltDefaultUserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "AltDefaultDomainName",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "AlwaysInstallElevated",
+    "columns": [
+      {
+        "name": "HKLM",
+        "type": "INTEGER"
+      },
+      {
+        "name": "HKCU",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "PointAndPrint",
+    "columns": [
+      {
+        "name": "RestrictDriverInstallationToAdministrators",
+        "type": "INTEGER"
+      },
+      {
+        "name": "NoWarningNoElevationOnInstall",
+        "type": "INTEGER"
+      },
+      {
+        "name": "UpdatePromptSettings",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "SecurityOptions",
+    "columns": [
+      {
+        "name": "Section",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SettingName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "SettingValue",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "RegistryValues",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "TEXT"
+      },
+      {
+        "name": "ValueName",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "ValueData",
+        "type": "TEXT"
+      },
+      {
+        "name": "ValueKind",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "RecentEvents",
+    "columns": [
+      {
+        "name": "Category",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "TimeCreated",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "EventId",
+        "type": "INTEGER"
+      },
+      {
+        "name": "Message",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "PSHistory",
+    "columns": [
+      {
+        "name": "UserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Size",
+        "type": "BIGINT"
+      },
+      {
+        "name": "Lines",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "ASRRules",
+    "columns": [
+      {
+        "name": "Enabled",
+        "type": "INTEGER"
+      },
+      {
+        "name": "EntryType",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SettingKey",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "SettingValue",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "LAPSInstalled",
+    "columns": [
+      {
+        "name": "DllExists",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "AdmPwdEnabled",
+        "type": "INTEGER"
+      },
+      {
+        "name": "PasswordComplexity",
+        "type": "INTEGER"
+      },
+      {
+        "name": "PasswordLength",
+        "type": "INTEGER"
+      },
+      {
+        "name": "PasswordAgeDays",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "AppLockerPolicy",
+    "columns": [
+      {
+        "name": "PolicyXml",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "WEFConfig",
+    "columns": [
+      {
+        "name": "ConfigData",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "CachedCredentials",
+    "columns": [
+      {
+        "name": "Output",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "SysmonConfig",
+    "columns": [
+      {
+        "name": "HashingAlgorithm",
+        "type": "INTEGER"
+      },
+      {
+        "name": "Options",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "SnapshotMetadata",
+    "columns": [
+      {
+        "name": "Key",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Value",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "Persistence",
+    "columns": [
+      {
+        "name": "Type",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Name",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Source",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Entry",
+        "type": "TEXT"
+      },
+      {
+        "name": "UserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      }
+    ]
+  },
+  {
+    "name": "SshAuthorizedKeys",
+    "columns": [
+      {
+        "name": "UserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "KeyType",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "KeyFingerprint",
+        "type": "TEXT"
+      },
+      {
+        "name": "Comment",
+        "type": "VARCHAR(512)"
+      }
+    ]
+  },
+  {
+    "name": "KernelModules",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Size",
+        "type": "BIGINT"
+      },
+      {
+        "name": "UsedByCount",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UsedBy",
+        "type": "VARCHAR(512)"
+      }
+    ]
+  },
+  {
+    "name": "InstalledPackages",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "Version",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Manager",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "InstallTime",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "SudoersConfig",
+    "columns": [
+      {
+        "name": "Source",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Entry",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "SetuidBinaries",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Permissions",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Owner",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "GroupName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Size",
+        "type": "BIGINT"
+      }
+    ]
+  },
+  {
+    "name": "DockerContainers",
+    "columns": [
+      {
+        "name": "ID",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Names",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "Image",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Status",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "Ports",
+        "type": "TEXT"
+      },
+      {
+        "name": "Command",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "FileCapabilities",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Capabilities",
+        "type": "VARCHAR(512)"
+      }
+    ]
+  },
+  {
+    "name": "WritableCriticalPaths",
+    "columns": [
+      {
+        "name": "Type",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "ConfigFile",
+        "type": "VARCHAR(2048)"
+      }
+    ]
+  },
+  {
+    "name": "DeletedExecutables",
+    "columns": [
+      {
+        "name": "PID",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "DeletedExe",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "CommandLine",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "Fstab",
+    "columns": [
+      {
+        "name": "Device",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "MountPoint",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "FsType",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Options",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "DbusServices",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "PID",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Process",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Session",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "UnixSockets",
+    "columns": [
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Process",
+        "type": "VARCHAR(512)"
+      }
+    ]
+  },
+  {
+    "name": "AttackTools",
+    "columns": [
+      {
+        "name": "Name",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      }
+    ]
+  },
+  {
+    "name": "SensitiveProcessEnvVars",
+    "columns": [
+      {
+        "name": "PID",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Variable",
+        "type": "VARCHAR(512)"
+      }
+    ]
+  },
+  {
+    "name": "InetdServices",
+    "columns": [
+      {
+        "name": "Source",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Entry",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "TerminalSessions",
+    "columns": [
+      {
+        "name": "Type",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Session",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "SshPrivateKeys",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Size",
+        "type": "BIGINT"
+      },
+      {
+        "name": "Mode",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Owner",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "InterestingHiddenFiles",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Size",
+        "type": "BIGINT"
+      },
+      {
+        "name": "Mode",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "ProcessBinaryPermissions",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Mode",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UID",
+        "type": "INTEGER"
+      },
+      {
+        "name": "GID",
+        "type": "INTEGER"
+      },
+      {
+        "name": "Size",
+        "type": "BIGINT"
+      }
+    ]
+  },
+  {
+    "name": "SystemdUnitPermissions",
+    "columns": [
+      {
+        "name": "Unit",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Mode",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UID",
+        "type": "INTEGER"
+      },
+      {
+        "name": "GID",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "CronScriptPermissions",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Source",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Mode",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UID",
+        "type": "INTEGER"
+      },
+      {
+        "name": "GID",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "LdSoConfPermissions",
+    "columns": [
+      {
+        "name": "Path",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "ConfigFile",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Mode",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UID",
+        "type": "INTEGER"
+      },
+      {
+        "name": "GID",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "LoggedInUsers",
+    "columns": [
+      {
+        "name": "SessionType",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "UserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Terminal",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "LoginTime",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Source",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "RemoteAddress",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SessionId",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "State",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Service",
+        "type": "VARCHAR(255)"
+      }
+    ]
+  },
+  {
+    "name": "HostsFile",
+    "columns": [
+      {
+        "name": "IPAddress",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Hostnames",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "KernelHardening",
+    "columns": [
+      {
+        "name": "Setting",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SettingValue",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "SecurityModules",
+    "columns": [
+      {
+        "name": "Module",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "Status",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "ContainerInfo",
+    "columns": [
+      {
+        "name": "InsideContainer",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "ContainerType",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "ContainerTools",
+        "type": "TEXT"
+      },
+      {
+        "name": "DockerSockets",
+        "type": "TEXT"
+      },
+      {
+        "name": "K8sServiceAccount",
+        "type": "BOOLEAN"
+      }
+    ]
+  },
+  {
+    "name": "SshConfig",
+    "columns": [
+      {
+        "name": "Section",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SettingKey",
+        "type": "VARCHAR(512)"
+      },
+      {
+        "name": "SettingValue",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "PrivilegedGroups",
+    "columns": [
+      {
+        "name": "GroupName",
+        "type": "VARCHAR(255)"
+      },
+      {
         "name": "Members",
-        "columns": [
-            {
-                "name": "UserSID",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "GroupSID",
-                "type": "VARCHAR(255)"
-            }
-        ]
-    },
-    {
-        "name": "Shares",
-        "columns": [
-            {
-                "name": "Name",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Path",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "ScopeName",
-                "type": "VARCHAR(255)"
-            }
-        ]
-    },
-    {
-        "name": "Autorunsc",
-        "columns": [
-            {
-                "name": "Entry Location",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Entry",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Enabled",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Category",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Profile",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Signer",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Company",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Image Path",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Version",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "Launch String",
-                "type": "VARCHAR(2047)"
-            },
-            {
-                "name": "MD5",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "SHA-1",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "PESHA-1",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "PESHA-256",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "SHA-256",
-                "type": "VARCHAR(255)"
-            },
-            {
-                "name": "IMP",
-                "type": "VARCHAR(255)"
-            }
-        ]
-    },
-    {
-        "name": "UserExecutables",
-        "columns": [
-            {
-                "name": "FullName",
-                "type": "VARCHAR(2048)"
-            },
-            {
-                "name": "Length",
-                "type": "INTEGER"
-            }
-        ]
-    },
-    {
-        "name": "SecurityProducts",
-        "columns": [
-            { "name": "Type", "type": "VARCHAR(255)" },
-            { "name": "DisplayName", "type": "VARCHAR(255)" },
-            { "name": "InstanceGuid", "type": "VARCHAR(255)" },
-            { "name": "PathToSignedProductExe", "type": "VARCHAR(2048)" },
-            { "name": "ProductState", "type": "INTEGER" },
-            { "name": "Enabled", "type": "BOOLEAN" },
-            { "name": "DefinitionsUpToDate", "type": "BOOLEAN" }
-        ]
-    },
-    {
-        "name": "EDRServices",
-        "columns": [
-            { "name": "ServiceName", "type": "VARCHAR(255)" },
-            { "name": "DisplayName", "type": "VARCHAR(255)" },
-            { "name": "Status", "type": "VARCHAR(255)" },
-            { "name": "StartType", "type": "VARCHAR(255)" }
-        ]
-    },
-    {
-        "name": "FirewallRules",
-        "columns": [
-            { "name": "Name", "type": "VARCHAR(255)" },
-            { "name": "DisplayName", "type": "VARCHAR(512)" },
-            { "name": "Direction", "type": "VARCHAR(255)" },
-            { "name": "Action", "type": "VARCHAR(255)" },
-            { "name": "Profile", "type": "VARCHAR(255)" },
-            { "name": "Enabled", "type": "VARCHAR(255)" },
-            { "name": "Description", "type": "TEXT" }
-        ]
-    },
-    {
-        "name": "LoggedOnUsers",
-        "columns": [
-            { "name": "UserName", "type": "VARCHAR(255)" },
-            { "name": "SessionName", "type": "VARCHAR(255)" },
-            { "name": "SessionId", "type": "VARCHAR(255)" },
-            { "name": "State", "type": "VARCHAR(255)" },
-            { "name": "IdleTime", "type": "VARCHAR(255)" },
-            { "name": "LogonTime", "type": "VARCHAR(255)" }
-        ]
-    },
-    {
-        "name": "InstalledApps",
-        "columns": [
-            { "name": "DisplayName", "type": "VARCHAR(512)" },
-            { "name": "DisplayVersion", "type": "VARCHAR(255)" },
-            { "name": "Publisher", "type": "VARCHAR(255)" },
-            { "name": "InstallLocation", "type": "VARCHAR(2048)" },
-            { "name": "InstallDate", "type": "VARCHAR(255)" }
-        ]
-    },
-    {
-        "name": "ScheduledTasks",
-        "columns": [
-            { "name": "TaskName", "type": "VARCHAR(512)" },
-            { "name": "TaskPath", "type": "VARCHAR(512)" },
-            { "name": "Author", "type": "VARCHAR(255)" },
-            { "name": "State", "type": "VARCHAR(255)" },
-            { "name": "Actions", "type": "TEXT" },
-            { "name": "RunAs", "type": "VARCHAR(255)" }
-        ]
-    },
-    {
-        "name": "ThirdPartyServices",
-        "columns": [
-            { "name": "Name", "type": "VARCHAR(255)" },
-            { "name": "DisplayName", "type": "VARCHAR(512)" },
-            { "name": "State", "type": "VARCHAR(255)" },
-            { "name": "StartMode", "type": "VARCHAR(255)" },
-            { "name": "PathName", "type": "VARCHAR(2048)" },
-            { "name": "StartName", "type": "VARCHAR(255)" },
-            { "name": "Company", "type": "VARCHAR(255)" }
-        ]
-    },
-    {
-        "name": "ThirdPartyDrivers",
-        "columns": [
-            { "name": "Name", "type": "VARCHAR(255)" },
-            { "name": "Path", "type": "VARCHAR(2048)" },
-            { "name": "Company", "type": "VARCHAR(255)" },
-            { "name": "Product", "type": "VARCHAR(255)" },
-            { "name": "Version", "type": "VARCHAR(255)" }
-        ]
-    },
-    {
-        "name": "NamedPipes",
-        "columns": [
-            { "name": "Name", "type": "VARCHAR(512)" }
-        ]
-    },
-    {
-        "name": "Certificates",
-        "columns": [
-            { "name": "Subject", "type": "TEXT" },
-            { "name": "Issuer", "type": "TEXT" },
-            { "name": "NotAfter", "type": "TIMESTAMP" },
-            { "name": "HasPrivateKey", "type": "BOOLEAN" },
-            { "name": "Thumbprint", "type": "VARCHAR(255)" },
-            { "name": "EKU", "type": "TEXT" },
-            { "name": "Template", "type": "VARCHAR(512)" }
-        ]
-    },
-    {
-        "name": "InstalledHotfixes",
-        "columns": [
-            { "name": "HotFixID", "type": "VARCHAR(255)" },
-            { "name": "Description", "type": "VARCHAR(255)" },
-            { "name": "InstalledOn", "type": "VARCHAR(255)" },
-            { "name": "InstalledBy", "type": "VARCHAR(255)" }
-        ]
-    },
-    {
-        "name": "MappedDrives",
-        "columns": [
-            { "name": "Name", "type": "VARCHAR(255)" },
-            { "name": "ProviderName", "type": "VARCHAR(512)" },
-            { "name": "SessionID", "type": "VARCHAR(255)" },
-            { "name": "Size", "type": "BIGINT" },
-            { "name": "FreeSpace", "type": "BIGINT" }
-        ]
-    },
-    {
-        "name": "ServiceBinaryAcls",
-        "columns": [
-            { "name": "ServiceName", "type": "VARCHAR(255)" },
-            { "name": "BinaryPath", "type": "VARCHAR(2048)" },
-            { "name": "Owner", "type": "VARCHAR(255)" },
-            { "name": "SDDL", "type": "TEXT" }
-        ]
-    },
-    {
-        "name": "NamedPipeAcls",
-        "columns": [
-            { "name": "Name", "type": "VARCHAR(512)" },
-            { "name": "SDDL", "type": "TEXT" }
-        ]
-    }
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "KerberosConfig",
+    "columns": [
+      {
+        "name": "SettingKey",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SettingValue",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "RcommandsTrust",
+    "columns": [
+      {
+        "name": "FilePath",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "Content",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "ShellHistory",
+    "columns": [
+      {
+        "name": "UserName",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "File",
+        "type": "VARCHAR(2048)"
+      },
+      {
+        "name": "TotalLines",
+        "type": "INTEGER"
+      },
+      {
+        "name": "Lines",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "AuditConfig",
+    "columns": [
+      {
+        "name": "SettingKey",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SettingValue",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "PamConfig",
+    "columns": [
+      {
+        "name": "Section",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SettingKey",
+        "type": "VARCHAR(255)"
+      },
+      {
+        "name": "SettingValue",
+        "type": "TEXT"
+      }
+    ]
+  },
+  {
+    "name": "CollectionErrors",
+    "columns": [
+      {
+        "name": "Error",
+        "type": "TEXT"
+      }
+    ]
+  }
 ]
