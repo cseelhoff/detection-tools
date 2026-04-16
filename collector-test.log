@@ -1,0 +1,7 @@
+﻿At C:\Users\caleb\Source\Repos\detection-tools\windows-collector.ps1:17 char:15
++ $snapshot = & {
++               ~
+Missing closing '}' in statement block or type definition.
+    + CategoryInfo          : ParserError: (:) [], ParseException
+    + FullyQualifiedErrorId : MissingEndCurlyBrace
+ 

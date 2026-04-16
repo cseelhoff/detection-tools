@@ -5,12 +5,14 @@
 $inventoryEntries = Get-Inventory
 $windowsHosts = $inventoryEntries | Where-Object { $_.Platform -eq 'windows' }
 
-# For backward compatibility: build per-host credential lookup
+# For backward compatibility: build per-host credential + auth type lookup
 $hostCredentials = @{}
+$hostAuthTypes = @{}
 foreach ($entry in $windowsHosts) {
     $hostCredentials[$entry.HostName] = $entry.Credential
+    $hostAuthTypes[$entry.HostName] = $entry.AuthType
 }
-$targetHosts = $windowsHosts | Select-Object -ExpandProperty HostName
+$targetHosts = @($windowsHosts | Select-Object -ExpandProperty HostName)
 
 # Ensure autorunsc.exe is present locally; attempt download if missing
 if (-not (Test-Path '.\autorunsc.exe')) {
@@ -33,31 +35,72 @@ if (-not (Test-Path '.\autorunsc.exe')) {
 }
 
 $autorunscScriptBlock = {
-    param($targetHost, [pscredential]$creds)
-    write-host "targethost: $targetHost"
+    param($targetHost, [pscredential]$creds, [string]$authType)
+    write-host "targethost: $targetHost (auth: $authType)"
     $autoRunscPath = '.\autorunsc.exe'
-    $session = New-PSSession -ComputerName $targetHost -Credential $creds
-    # if the session is not created, exit the script
-    if (!$session) {
-        Write-Error "Failed to create a session to $targetHost`n"
-        exit
-    }
-    $installResults = Invoke-Command -Session $session -ScriptBlock {
-        # Define the path to autorunsc.exe in the Downloads directory
-        $autorunscPath = Join-Path -Path $env:TEMP -ChildPath '\autorunsc.exe'
-        #$autorunscPath | Out-File -FilePath '.\autorunscPath.txt'
 
-        # Check if autorunsc.exe exists
-        $autorunscExists = Test-Path $autorunscPath
-        [PSCustomObject]@{
-            AutorunscExists = $autorunscExists
-            DownloadPath = $autorunscPath
+    # Detect if target is the local machine
+    $localNames = @('localhost', '127.0.0.1', '::1', '.', $env:COMPUTERNAME, "$env:COMPUTERNAME.$env:USERDNSDOMAIN")
+    try { $localNames += [System.Net.Dns]::GetHostName() } catch {}
+    $isLocal = $targetHost -in $localNames
+
+    if ($isLocal) {
+        write-host "  Running locally (no PSRemoting needed)"
+        $localAutorunsc = Join-Path $env:TEMP 'autorunsc.exe'
+        if (-not (Test-Path $localAutorunsc) -and (Test-Path $autoRunscPath)) {
+            Copy-Item -Path $autoRunscPath -Destination $localAutorunsc -Force
+        }
+    } elseif ($authType -in @('ssh-password', 'ssh-key', 'ssh-powershell')) {
+        # Use SSH-based PSRemoting (PowerShell 7+) - no WinRM/Kerberos needed
+        # Note: SSHHost parameter set does NOT support -Credential.
+        # Password auth will prompt interactively via SSH. For non-interactive,
+        # use ssh-key auth or configure ssh-agent.
+        write-host "  Using PowerShell over SSH"
+        $sshParams = @{
+            HostName    = $targetHost
+            UserName    = $creds.UserName
+            ErrorAction = 'Stop'
+        }
+        if ($authType -eq 'ssh-key' -or ($creds -is [hashtable] -and $creds.KeyFile)) {
+            $keyFile = if ($creds -is [hashtable]) { $creds.KeyFile } else { $null }
+            if ($keyFile) { $sshParams['KeyFilePath'] = $keyFile }
+        }
+        $session = New-PSSession @sshParams
+        if (!$session) {
+            Write-Error "Failed to create SSH session to $targetHost`n"
+            exit
+        }
+        $installResults = Invoke-Command -Session $session -ScriptBlock {
+            $autorunscPath = Join-Path -Path $env:TEMP -ChildPath 'autorunsc.exe'
+            [PSCustomObject]@{
+                AutorunscExists = (Test-Path $autorunscPath)
+                DownloadPath = $autorunscPath
+            }
+        }
+        if (!$installResults.AutorunscExists -and (Test-Path $autoRunscPath)) {
+            Copy-Item -Path $autoRunscPath -Destination $installResults.DownloadPath -ToSession $session
+        }
+    } else {
+        # WinRM-based PSRemoting (traditional)
+        $session = New-PSSession -ComputerName $targetHost -Credential $creds
+        if (!$session) {
+            Write-Error "Failed to create a session to $targetHost`n"
+            exit
+        }
+        $installResults = Invoke-Command -Session $session -ScriptBlock {
+            $autorunscPath = Join-Path -Path $env:TEMP -ChildPath '\autorunsc.exe'
+            [PSCustomObject]@{
+                AutorunscExists = (Test-Path $autorunscPath)
+                DownloadPath = $autorunscPath
+            }
+        }
+        if (!$installResults.AutorunscExists) {
+            Copy-Item -Path $autoRunscPath -Destination $installResults.DownloadPath -ToSession $session
         }
     }
-    if (!$installResults.AutorunscExists) {
-        Copy-Item -Path $autoRunscPath -Destination $installResults.DownloadPath -ToSession $session
-    }
-    $snapshotResults = Invoke-Command -Session $session -ScriptBlock {
+
+    # The collection scriptblock — runs either locally or remotely
+    $collectionBlock = {
         $systemUUID = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty UUID
         #write-host 'compinfo'
         $computerInfo = Get-ComputerInfo | Select-Object -Property CsName, CsDNSHostName, CsDomain, CsManufacturer, CsModel, CsPartOfDomain, @{Name='CsPCSystemType'; Expression={$_.CsPCSystemType.ToString()}}, OsName, @{Name='OsType'; Expression={$_.OsType.ToString()}}, OsVersion, OsSystemDrive, OsLastBootUpTime
@@ -486,7 +529,11 @@ $autorunscScriptBlock = {
         # This enumerates every file record on the volume in seconds rather
         # than minutes, because it sequentially scans the MFT instead of
         # recursively walking directories through the filesystem API.
-        $fileInventory = $null
+        #
+        # The inventory is written directly to a CSV file (not returned in the
+        # snapshot object) because millions of records would exhaust memory
+        # during JSON serialization. The CSV is saved alongside the JSON snapshot.
+        $fileInventoryCount = 0
         $fileInventoryErrors = ""
         try {
             $mftSource = @'
@@ -496,7 +543,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 
-public class MftReader
+public class MftScanner
 {
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     private static extern IntPtr CreateFile(
@@ -519,6 +566,8 @@ public class MftReader
     private const uint FILE_SHARE_WRITE = 0x02;
     private const uint OPEN_EXISTING = 3;
     private const uint FSCTL_ENUM_USN_DATA = 0x000900B3;
+    // Mask to extract 48-bit file number from File Reference Number (strip 16-bit sequence)
+    private const long FRN_MASK = 0x0000FFFFFFFFFFFF;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MFT_ENUM_DATA_V0
@@ -528,21 +577,19 @@ public class MftReader
         public long HighUsn;
     }
 
-    public class FileRecord
+    public static int EnumerateVolumeToCsv(string volumeLetter, string csvPath)
     {
-        public long FileReferenceNumber;
-        public long ParentFileReferenceNumber;
-        public string FileName;
-        public int FileAttributes;
-        public long FileSize;
-        public string FullPath; // resolved after scan
-    }
-
-    public static List<FileRecord> EnumerateVolume(string volumeLetter)
-    {
-        var records = new List<FileRecord>();
-        var dirs = new Dictionary<long, FileRecord>();
+        // Phase 1: Scan MFT and collect all directory names + file entries
+        var dirNames = new Dictionary<long, string>();     // masked FRN -> dir name
+        var dirParents = new Dictionary<long, long>();      // masked FRN -> masked parent FRN
+        var fileEntries = new List<long[]>();               // [maskedParentFRN, attrs, fnameIdx]
+        var fileNames = new List<string>();
         string volumePath = "\\\\.\\" + volumeLetter + ":";
+        int fileCount = 0;
+
+        // Pre-seed FRN 5 = NTFS root directory (not returned by USN enumeration)
+        dirNames[5] = volumeLetter + ":";
+        dirParents[5] = 5; // self-referencing root
 
         IntPtr hVolume = CreateFile(volumePath,
             GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -553,7 +600,7 @@ public class MftReader
 
         try
         {
-            int bufferSize = 1024 * 1024; // 1 MB buffer
+            int bufferSize = 2 * 1024 * 1024; // 2 MB buffer for speed
             IntPtr buffer = Marshal.AllocHGlobal(bufferSize);
             try
             {
@@ -567,37 +614,39 @@ public class MftReader
                     ref mftData, Marshal.SizeOf(mftData),
                     buffer, bufferSize, out bytesReturned, IntPtr.Zero))
                 {
-                    int offset = 8; // skip the next USN at start of buffer
+                    int offset = 8; // skip next-USN at start of buffer
                     while (offset < bytesReturned)
                     {
-                        // USN_RECORD_V2 layout
                         int recordLen = Marshal.ReadInt32(buffer, offset);
                         if (recordLen == 0) break;
-                        long frn = Marshal.ReadInt64(buffer, offset + 8);
-                        long parentFrn = Marshal.ReadInt64(buffer, offset + 16);
-                        int attrs = Marshal.ReadInt32(buffer, offset + 36);
+
+                        // USN_RECORD_V2 fields
+                        long frn = Marshal.ReadInt64(buffer, offset + 8) & FRN_MASK;
+                        long parentFrn = Marshal.ReadInt64(buffer, offset + 16) & FRN_MASK;
+                        // USN_RECORD_V2 layout:
+                        //   +0  RecordLength (4)  +4 MajorVersion (2)  +6 MinorVersion (2)
+                        //   +8  FileReferenceNumber (8)  +16 ParentFileReferenceNumber (8)
+                        //  +24  Usn (8)  +32 TimeStamp (8)  +40 Reason (4)  +44 SourceInfo (4)
+                        //  +48  SecurityId (4)  +52 FileAttributes (4)
+                        //  +56  FileNameLength (2)  +58 FileNameOffset (2)  +60 FileName (var)
+                        int attrs = Marshal.ReadInt32(buffer, offset + 52);
                         int fnLength = Marshal.ReadInt16(buffer, offset + 56);
                         int fnOffset = Marshal.ReadInt16(buffer, offset + 58);
                         string fn = Marshal.PtrToStringUni(
                             new IntPtr(buffer.ToInt64() + offset + fnOffset), fnLength / 2);
 
-                        // Read file size from the USN record's Reason field area
-                        // (USN records don't contain size; we store 0 and resolve later if needed)
-                        var rec = new FileRecord
-                        {
-                            FileReferenceNumber = frn,
-                            ParentFileReferenceNumber = parentFrn,
-                            FileName = fn,
-                            FileAttributes = attrs,
-                            FileSize = 0
-                        };
-                        records.Add(rec);
                         if ((attrs & 0x10) != 0) // FILE_ATTRIBUTE_DIRECTORY
-                            dirs[frn] = rec;
-
+                        {
+                            dirNames[frn] = fn;
+                            dirParents[frn] = parentFrn;
+                        }
+                        else
+                        {
+                            fileNames.Add(fn);
+                            fileEntries.Add(new long[] { parentFrn, attrs, fileNames.Count - 1 });
+                        }
                         offset += recordLen;
                     }
-                    // Next iteration starts from the USN returned at the beginning of the buffer
                     mftData.StartFileReferenceNumber = Marshal.ReadInt64(buffer, 0);
                 }
             }
@@ -611,70 +660,154 @@ public class MftReader
             CloseHandle(hVolume);
         }
 
-        // Resolve full paths from parent chain (cap depth to prevent infinite loops)
+        // Phase 2: Resolve directory paths and write CSV
+        // Allowlist: only security-relevant extensions
+        var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+            ".exe", ".dll", ".sys", ".drv", ".ocx", ".scr", ".cpl", ".com", ".pif",
+            ".ps1", ".psm1", ".psd1", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse",
+            ".wsh", ".wsf", ".hta", ".sct", ".py", ".sh", ".rb", ".pl",
+            ".xml", ".json", ".yml", ".yaml", ".conf", ".cfg", ".ini", ".inf", ".reg",
+            ".toml", ".env",
+            ".msi", ".msp", ".mst", ".cab",
+            ".log", ".evtx", ".etl",
+            ".lnk", ".url",
+            ".jar", ".class", ".war",
+            ".task", ".job",
+        };
+        // Directories to skip entirely
+        var excludedDirNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+            "WinSxS", "servicing", "Installer", "SoftwareDistribution",
+            "assembly", "catroot", "catroot2",
+        };
+
         var pathCache = new Dictionary<long, string>();
-        foreach (var rec in records)
+        string rootPath = volumeLetter + ":";
+
+        using (var writer = new StreamWriter(csvPath, false, System.Text.Encoding.UTF8))
         {
-            rec.FullPath = ResolvePath(rec, dirs, pathCache, volumeLetter);
+            writer.WriteLine("FullPath,FileName,FileAttributes,FileSize");
+            foreach (var entry in fileEntries)
+            {
+                long parentFrn = entry[0];
+                int attrs = (int)entry[1];
+                string fileName = fileNames[(int)entry[2]];
+
+                // Extension allowlist filter
+                int dotIdx = fileName.LastIndexOf('.');
+                if (dotIdx < 0) continue;
+                string ext = fileName.Substring(dotIdx);
+                if (!allowedExtensions.Contains(ext)) continue;
+
+                // Resolve full directory path
+                string dirPath = ResolveDirPath(parentFrn, dirNames, dirParents, pathCache, rootPath);
+
+                // Exclude known Windows system directories
+                bool skip = false;
+                foreach (var exDir in excludedDirNames)
+                {
+                    if (dirPath.IndexOf("\\" + exDir + "\\", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        dirPath.EndsWith("\\" + exDir, StringComparison.OrdinalIgnoreCase))
+                    {
+                        skip = true;
+                        break;
+                    }
+                }
+                if (skip) continue;
+
+                string fullPath = dirPath + "\\" + fileName;
+
+                // Get file size via FileInfo (fast for individual lookups, OS caches metadata)
+                long fileSize = 0;
+                try { fileSize = new FileInfo(fullPath).Length; } catch { }
+
+                // CSV escape
+                string csvPath1 = fullPath;
+                string csvName = fileName;
+                if (csvPath1.Contains(",") || csvPath1.Contains("\"") || csvPath1.Contains("\n"))
+                    csvPath1 = "\"" + csvPath1.Replace("\"", "\"\"") + "\"";
+                if (csvName.Contains(",") || csvName.Contains("\""))
+                    csvName = "\"" + csvName.Replace("\"", "\"\"") + "\"";
+
+                writer.Write(csvPath1);
+                writer.Write(',');
+                writer.Write(csvName);
+                writer.Write(',');
+                writer.Write(attrs);
+                writer.Write(',');
+                writer.WriteLine(fileSize);
+                fileCount++;
+            }
         }
-        return records;
+        return fileCount;
     }
 
-    private static string ResolvePath(FileRecord rec,
-        Dictionary<long, FileRecord> dirs,
-        Dictionary<long, string> cache, string vol)
+    private static string ResolveDirPath(long frn,
+        Dictionary<long, string> dirNames, Dictionary<long, long> dirParents,
+        Dictionary<long, string> cache, string rootPath)
     {
-        if (cache.ContainsKey(rec.FileReferenceNumber))
-            return cache[rec.FileReferenceNumber];
+        if (cache.ContainsKey(frn))
+            return cache[frn];
 
-        var parts = new List<string>();
-        parts.Add(rec.FileName);
-        long current = rec.ParentFileReferenceNumber;
-        int depth = 0;
-        while (current != 0 && depth < 512)
+        // FRN 5 = NTFS root directory
+        if (frn == 5)
         {
+            cache[frn] = rootPath;
+            return rootPath;
+        }
+
+        // Walk the parent chain, collecting directory names
+        var parts = new List<string>();
+        long current = frn;
+        int depth = 0;
+        while (depth < 512)
+        {
+            // Check cache first
             if (cache.ContainsKey(current))
             {
                 parts.Add(cache[current]);
                 break;
             }
-            FileRecord parent;
-            if (!dirs.TryGetValue(current, out parent)) break;
-            // FRN 5 is typically the root directory of the volume
-            if (parent.FileReferenceNumber == 5 ||
-                parent.ParentFileReferenceNumber == parent.FileReferenceNumber)
+            // Root directory
+            if (current == 5)
             {
-                parts.Add(vol + ":");
+                parts.Add(rootPath);
                 break;
             }
-            parts.Add(parent.FileName);
-            current = parent.ParentFileReferenceNumber;
+            // Look up this directory's name
+            string name;
+            if (!dirNames.TryGetValue(current, out name))
+            {
+                // Unknown FRN — probably orphaned or system metadata; use root
+                parts.Add(rootPath);
+                break;
+            }
+            parts.Add(name);
+            // Move to parent
+            long parent;
+            if (!dirParents.TryGetValue(current, out parent) || parent == current)
+            {
+                parts.Add(rootPath);
+                break;
+            }
+            current = parent;
             depth++;
         }
+
+        // parts is [child, ..., parent, root] — reverse to get path order
         parts.Reverse();
         string path = string.Join("\\", parts);
-        cache[rec.FileReferenceNumber] = path;
+        cache[frn] = path;
         return path;
     }
 }
 '@
-            if (-not ([System.Management.Automation.PSTypeName]'MftReader').Type) {
+            if (-not ([System.Management.Automation.PSTypeName]'MftScanner').Type) {
                 Add-Type -TypeDefinition $mftSource -Language CSharp
             }
-            # Scan the system drive (typically C:)
             $systemDriveLetter = $env:SystemDrive.TrimEnd(':')
-            $allRecords = [MftReader]::EnumerateVolume($systemDriveLetter)
-            # Return a lightweight inventory: just files (not directories), with path + attributes
-            $fileInventory = New-Object System.Collections.ArrayList
-            foreach ($rec in $allRecords) {
-                if (($rec.FileAttributes -band 0x10) -eq 0) { # not a directory
-                    $null = $fileInventory.Add([PSCustomObject]@{
-                        FullPath       = $rec.FullPath
-                        FileName       = $rec.FileName
-                        FileAttributes = $rec.FileAttributes
-                    })
-                }
-            }
+            $mftCsvPath = Join-Path $env:TEMP "file-inventory_$($env:COMPUTERNAME).csv"
+            $fileInventoryCount = [MftScanner]::EnumerateVolumeToCsv($systemDriveLetter, $mftCsvPath)
+            $fileInventoryErrors = ""
         } catch {
             $fileInventoryErrors = $_.Exception.Message
         }
@@ -1392,7 +1525,8 @@ public class MftReader
             Autorunsc = $autorunsc_stdout
             AutorunscErrors = $autorunsc_stderr
             UserExecutables = $userExecutables
-            FileInventory = $fileInventory
+            FileInventoryCount = $fileInventoryCount
+            FileInventoryCsvPath = $mftCsvPath
             FileInventoryErrors = $fileInventoryErrors
             RegistrySnapshot = $registrySnapshot
             RegistryErrors = $registryErrors
@@ -1441,12 +1575,35 @@ public class MftReader
             HomeDirAcls = $homeDirAcls
         }
     }
+
+    # Dispatch: run locally or remotely
+    if ($isLocal) {
+        $snapshotResults = & $collectionBlock
+    } else {
+        $snapshotResults = Invoke-Command -Session $session -ScriptBlock $collectionBlock
+    }
+
+    # Copy the MFT CSV from remote host to local (for local, it's already here)
+    $saveHostName = if ($targetHost -in @('.', 'localhost', '127.0.0.1')) { $env:COMPUTERNAME } else { $targetHost }
+    $localCsvPath = ".\file-inventory_$($saveHostName).csv"
+    if ($snapshotResults.FileInventoryCsvPath -and $snapshotResults.FileInventoryCount -gt 0) {
+        if ($isLocal) {
+            if ($snapshotResults.FileInventoryCsvPath -ne $localCsvPath) {
+                Copy-Item $snapshotResults.FileInventoryCsvPath $localCsvPath -Force -ErrorAction SilentlyContinue
+            }
+        } else {
+            Copy-Item -Path $snapshotResults.FileInventoryCsvPath -Destination $localCsvPath -FromSession $session -Force -ErrorAction SilentlyContinue
+        }
+        Write-Host "  MFT inventory: $($snapshotResults.FileInventoryCount) files -> $localCsvPath"
+    }
+
     $snapshotResults
 }
 $maxConcurrentJobs = 10
 
 # Create an array to hold the job objects
 $jobs = @()
+$jobHostMap = @{}  # jobId → hostname
 $jobHostMap = @{}  # jobId → hostname
 
 $ReadFromFileScriptBlock = {
@@ -1457,10 +1614,52 @@ $ReadFromFileScriptBlock = {
 
 # Start a job for each target host
 $targetHostsCount = $targetHosts.Count
+$localResults = @{}  # hostname → result for locally-run hosts
 for ($i = 0; $i -lt $targetHostsCount; $i++) {
     $targetHost = $targetHosts[$i]
     $hostCred = $hostCredentials[$targetHost]
+    $hostAuthType = $hostAuthTypes[$targetHost]
     write-host "running script on host: $targetHost"
+
+    # Check if this is the local machine — run synchronously
+    $localNames = @('localhost', '127.0.0.1', '::1', '.', $env:COMPUTERNAME, "$env:COMPUTERNAME.$env:USERDNSDOMAIN")
+    try { $localNames += [System.Net.Dns]::GetHostName() } catch {}
+    $isLocalHost = $targetHost -in $localNames
+
+    # SSH-based Windows hosts must also run synchronously (can't do SSH in Start-Job)
+    $isSshWindows = $hostAuthType -in @('ssh-password', 'ssh-key', 'ssh-powershell')
+
+    if ($isLocalHost) {
+        Write-Host "  Detected localhost -- running collection directly (no PSRemoting)" -ForegroundColor Cyan
+        try {
+            $result = & $autorunscScriptBlock $targetHost $hostCred $hostAuthType
+            $localResults[$targetHost] = $result
+            Write-Host "  localhost collection complete" -ForegroundColor Green
+        } catch {
+            Write-Host "  localhost collection FAILED: $($_.Exception.Message)" -ForegroundColor Red
+            $localResults[$targetHost] = $null
+        }
+        Write-Progress -Activity "Processing target hosts" -Status "$($i+1) of $targetHostsCount completed" -PercentComplete ((($i+1) / $targetHostsCount) * 100)
+        continue
+    }
+
+    if ($isSshWindows) {
+        Write-Host "  Using PowerShell over SSH (synchronous)" -ForegroundColor Cyan
+        try {
+            $result = & $autorunscScriptBlock $targetHost $hostCred $hostAuthType
+            $localResults[$targetHost] = $result
+            Write-Host "  SSH collection complete" -ForegroundColor Green
+        } catch {
+            Write-Host "  SSH collection FAILED: $($_.Exception.Message)" -ForegroundColor Red
+            $localResults[$targetHost] = $null
+            $credName = ($inventoryEntries | Where-Object { $_.HostName -eq $targetHost } | Select-Object -First 1).CredentialName
+            if ($credName) { Set-CredentialFailed -HostName $targetHost -CredentialName $credName }
+        }
+        Write-Progress -Activity "Processing target hosts" -Status "$($i+1) of $targetHostsCount completed" -PercentComplete ((($i+1) / $targetHostsCount) * 100)
+        continue
+    }
+
+    # Remote host — use Start-Job for parallel execution
     # If there are 10 or more running jobs, wait for one to finish
     while (($jobs | Where-Object { $_.State -eq 'Running' }).Count -ge $maxConcurrentJobs) {
         # Wait for any job to finish
@@ -1469,44 +1668,169 @@ for ($i = 0; $i -lt $targetHostsCount; $i++) {
         $jobs = $jobs | Where-Object { $_.Id -ne $finishedJob.Id }
     }
     # Start a new job with per-host credentials
-    $job = Start-Job -ScriptBlock $autorunscScriptBlock -ArgumentList @($targetHost, $hostCred)
+    $job = Start-Job -ScriptBlock $autorunscScriptBlock -ArgumentList @($targetHost, $hostCred, $hostAuthType)
     $jobs += $job
     $jobHostMap[$job.Id] = $targetHost
     #$jobs += Start-Job -ScriptBlock $ReadFromFileScriptBlock -ArgumentList @($targetHost)
 
     # Update the progress bar
-    Write-Progress -Activity "Processing target hosts" -Status "$i of $targetHostsCount completed" -PercentComplete (($i / $targetHostsCount) * 100)
+    Write-Progress -Activity "Processing target hosts" -Status "$($i+1) of $targetHostsCount completed" -PercentComplete ((($i+1) / $targetHostsCount) * 100)
 }
-$jobs | Wait-Job
-# Process results, tracking failures for credential feedback
+if ($jobs.Count -gt 0) { $jobs | Wait-Job }
 $failedHosts = @()
+
+# Helper: serialize snapshot to JSON field-by-field to avoid ConvertTo-Json OOM on large objects
+function Save-SnapshotJson {
+    param($Result, [string]$FilePath)
+    $sb = [System.Text.StringBuilder]::new(2 * 1024 * 1024)
+    $null = $sb.Append('{')
+    $first = $true
+    foreach ($prop in $Result.PSObject.Properties) {
+        if (-not $first) { $null = $sb.Append(',') }
+        $first = $false
+        $propName = $prop.Name -replace '"', '\"'
+        $null = $sb.Append("`n`"$propName`": ")
+        try {
+            $json = $prop.Value | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue
+            if ($null -eq $json) { $json = 'null' }
+            $null = $sb.Append($json)
+        } catch {
+            $null = $sb.Append('null')
+        }
+    }
+    $null = $sb.Append("`n}")
+    [System.IO.File]::WriteAllText($FilePath, $sb.ToString(), [System.Text.Encoding]::UTF8)
+}
+
+# Compress snapshot files per host (JSON + MFT CSV -> single zip)
+function Save-CompressedSnapshot {
+    param([string]$HostName, [string]$JsonPath)
+    $zipPath = $JsonPath -replace '\.json$', '.zip'
+    $filesToZip = @($JsonPath)
+    # Include MFT CSV if it exists
+    $csvPath = Join-Path (Split-Path $JsonPath) "file-inventory_$($HostName).csv"
+    if (Test-Path $csvPath) { $filesToZip += $csvPath }
+    try {
+        Compress-Archive -Path $filesToZip -DestinationPath $zipPath -Force
+        $rawMB = [math]::Round(($filesToZip | Get-Item | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
+        $zipMB = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
+        Write-Host "  Compressed: $zipMB MB (from $rawMB MB raw)" -ForegroundColor Gray
+    } catch {
+        Write-Host "  Compression failed: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+
+# Process local results first
+foreach ($hostName in $localResults.Keys) {
+    $result = $localResults[$hostName]
+    $saveHostName = if ($hostName -in @('.', 'localhost', '127.0.0.1')) { $env:COMPUTERNAME } else { $hostName }
+    if ($result) {
+        try {
+            $outPath = Join-Path (Get-Location) "system-info_$($saveHostName).json"
+            Save-SnapshotJson -Result $result -FilePath $outPath
+            $sizeMB = [math]::Round((Get-Item $outPath).Length / 1MB, 1)
+            Write-Host "OK: $hostName -> system-info_$($saveHostName).json ($sizeMB MB)" -ForegroundColor Green
+            Save-CompressedSnapshot -HostName $saveHostName -JsonPath $outPath
+        } catch {
+            Write-Host "FAILED: $hostName -- JSON save error: $($_.Exception.Message)" -ForegroundColor Red
+            $failedHosts += $hostName
+        }
+    } else {
+        Write-Host "FAILED: $hostName (local collection returned no data)" -ForegroundColor Red
+        $failedHosts += $hostName
+    }
+}
+# Process remote job results
 foreach ($job in $jobs) {
     $hostName = $jobHostMap[$job.Id]
     if ($job.State -eq 'Failed') {
-        Write-Host "FAILED: $hostName — $($job.ChildJobs[0].JobStateInfo.Reason)" -ForegroundColor Red
+        Write-Host "FAILED: $hostName -- $($job.ChildJobs[0].JobStateInfo.Reason)" -ForegroundColor Red
         $failedHosts += $hostName
-        # Mark credential as failed so it won't be auto-saved
         $credName = ($inventoryEntries | Where-Object { $_.HostName -eq $hostName } | Select-Object -First 1).CredentialName
         if ($credName) { Set-CredentialFailed -HostName $hostName -CredentialName $credName }
         continue
     }
     try {
         $result = Receive-Job -Job $job -ErrorAction Stop
-        $result | ConvertTo-Json -Depth 9 | Out-File -FilePath ".\system-info_$($hostName).json"
-        Write-Host "OK: $hostName → system-info_$($hostName).json" -ForegroundColor Green
+        $outPath = Join-Path (Get-Location) "system-info_$($hostName).json"
+        Save-SnapshotJson -Result $result -FilePath $outPath
+        $sizeMB = [math]::Round((Get-Item $outPath).Length / 1MB, 1)
+        Write-Host "OK: $hostName -> system-info_$($hostName).json ($sizeMB MB)" -ForegroundColor Green
+        Save-CompressedSnapshot -HostName $hostName -JsonPath $outPath
     } catch {
-        Write-Host "FAILED: $hostName — $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "FAILED: $hostName -- $($_.Exception.Message)" -ForegroundColor Red
         $failedHosts += $hostName
         $credName = ($inventoryEntries | Where-Object { $_.HostName -eq $hostName } | Select-Object -First 1).CredentialName
         if ($credName) { Set-CredentialFailed -HostName $hostName -CredentialName $credName }
     }
 }
+
+# ---- Linux Host Collection (via ssh-collect.py) ----
+$linuxHosts = @($inventoryEntries | Where-Object { $_.Platform -eq 'linux' })
+$linuxSucceeded = 0
+$linuxFailed = 0
+if ($linuxHosts.Count -gt 0) {
+    Write-Host "`n--- Linux Hosts ($($linuxHosts.Count)) ---" -ForegroundColor Cyan
+    $sshCollector = Join-Path $PSScriptRoot 'ssh-collect.py'
+    $linuxCollector = Join-Path $PSScriptRoot 'linux-collector.py'
+    foreach ($lhost in $linuxHosts) {
+        $hostName = $lhost.HostName
+        $outputFile = Join-Path (Get-Location) "system-info_$($hostName).json"
+        # Determine auth: password or key
+        $auth = ''
+        if ($lhost.AuthType -eq 'ssh-key' -and $lhost.KeyFile) {
+            $auth = "KEY:$($lhost.KeyFile)"
+        } elseif ($lhost.Credential -is [hashtable]) {
+            # SSH info dict
+            $auth = if ($lhost.Credential.KeyFile) { "KEY:$($lhost.Credential.KeyFile)" } else { '' }
+        }
+        if (-not $auth) {
+            # Get password from the credential
+            $cred = $lhost.Credential
+            if ($cred -is [PSCredential]) {
+                $auth = $cred.GetNetworkCredential().Password
+            } elseif ($cred -is [hashtable] -and $cred.Password) {
+                $auth = $cred.Password
+            } else {
+                # Try to get from inventory credentials
+                $credName = $lhost.CredentialName
+                $invCreds = (Get-Content (Join-Path $PSScriptRoot 'inventory.yml') -Raw | ConvertFrom-InventoryYaml).credentials
+                if ($invCreds -and $invCreds[$credName]) {
+                    $auth = $invCreds[$credName].password
+                    if (-not $auth -and $invCreds[$credName].key_file) {
+                        $auth = "KEY:$($invCreds[$credName].key_file)"
+                    }
+                }
+            }
+        }
+        $user = if ($lhost.Credential -is [PSCredential]) { $lhost.Credential.UserName } `
+                elseif ($lhost.Credential -is [hashtable]) { $lhost.Credential.UserName } `
+                else { 'root' }
+        
+        Write-Host "  Collecting: $hostName ($user)..." -NoNewline
+        $result = & python $sshCollector $hostName $user $auth $linuxCollector $outputFile 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host " OK" -ForegroundColor Green
+            $linuxSucceeded++
+        } else {
+            Write-Host " FAILED" -ForegroundColor Red
+            Write-Host "    $result" -ForegroundColor Red
+            $linuxFailed++
+            $failedHosts += $hostName
+        }
+    }
+}
+
 # Summary
+$totalHosts = $targetHostsCount + $linuxHosts.Count
+$totalSucceeded = ($targetHostsCount - $failedHosts.Count) + $linuxSucceeded
 Write-Host "`n=========================================" -ForegroundColor White
 Write-Host " Collection Complete" -ForegroundColor White
 Write-Host "=========================================" -ForegroundColor White
-Write-Host " Succeeded: $($targetHostsCount - $failedHosts.Count) / $targetHostsCount"
+Write-Host " Windows: $($targetHostsCount - ($failedHosts | Where-Object { $_ -notin ($linuxHosts.HostName) }).Count) / $targetHostsCount"
+Write-Host " Linux:   $linuxSucceeded / $($linuxHosts.Count)"
+Write-Host " Total:   $totalSucceeded / $totalHosts"
 if ($failedHosts.Count -gt 0) {
-    Write-Host " Failed:    $($failedHosts.Count) ($($failedHosts -join ', '))" -ForegroundColor Red
+    Write-Host " Failed:  $($failedHosts -join ', ')" -ForegroundColor Red
 }
 Write-Host "=========================================" -ForegroundColor White

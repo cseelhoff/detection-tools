@@ -175,6 +175,8 @@ def analyze_windows(snap):
 
     subsection("Registered Security Products (SecurityCenter2)")
     for p in (snap.get("SecurityProducts") or []):
+        if not isinstance(p, dict):
+            continue
         parts = []
         if p.get("Enabled") is True:
             parts.append(GREEN("Enabled"))
@@ -244,10 +246,12 @@ def analyze_windows(snap):
         warn("No AMSI providers -- script scanning may be disabled")
     else:
         for p in amsi:
+            if not isinstance(p, dict): continue
             good(f"AMSI: {p.get('DllPath', '?')} ({p.get('CLSID', '')})")
 
     subsection("EDR Services")
     for svc in (snap.get("EDRServices") or []):
+        if not isinstance(svc, dict): continue
         fn = good if str(svc.get("Status", "")).lower() == "running" else bad
         fn(f"{svc.get('DisplayName', svc.get('ServiceName', '?'))}: {svc.get('Status')}")
 
@@ -339,6 +343,7 @@ def analyze_windows(snap):
                        "SeTakeOwnershipPrivilege", "SeBackupPrivilege", "SeRestorePrivilege",
                        "SeTcbPrivilege", "SeCreateTokenPrivilege", "SeAssignPrimaryTokenPrivilege"}
     for priv in (snap.get("TokenPrivileges") or []):
+        if not isinstance(priv, dict): continue
         name = priv.get("Privilege Name", priv.get("PrivilegeName", ""))
         state = str(priv.get("State", priv.get("Attributes", "")))
         if name in dangerous_privs:
@@ -355,6 +360,7 @@ def analyze_windows(snap):
 
     subsection("PATH Directory ACLs")
     for p in (snap.get("PathDirAcls") or []):
+        if not isinstance(p, dict): continue
         if sddl_grants_write(p.get("SDDL", "")):
             bad(f"Writable PATH dir: {p.get('Path')}")
 
@@ -365,6 +371,7 @@ def analyze_windows(snap):
     critical_subcats = ["Logon", "Process Creation", "Special Logon",
                         "Security Group Management", "User Account Management"]
     for pol in (snap.get("AuditPolicies") or []):
+        if not isinstance(pol, dict): continue
         subcat = pol.get("Subcategory", "")
         setting = pol.get("Inclusion Setting", "")
         if subcat in critical_subcats:
@@ -396,6 +403,7 @@ def analyze_windows(snap):
 
     subsection("Firewall Profiles")
     for p in (snap.get("FirewallProfiles") or []):
+        if not isinstance(p, dict): continue
         fn = good if p.get("Enabled") in (True, "True") else bad
         fn(f"{p.get('Name')} profile: {'Enabled' if p.get('Enabled') in (True, 'True') else 'DISABLED'}")
 
@@ -425,6 +433,7 @@ def analyze_windows(snap):
 
     subsection("Connections to external IPs")
     for c in (snap.get("TcpConnections") or []):
+        if not isinstance(c, dict): continue
         if c.get("State") != "Established":
             continue
         ra = c.get("RemoteAddress", "")
@@ -451,6 +460,7 @@ def analyze_windows(snap):
 
     subsection("Non-Microsoft Scheduled Tasks")
     for t in (snap.get("ScheduledTasks") or [])[:15]:
+        if not isinstance(t, dict): continue
         detail(f"{t.get('TaskName')} | {t.get('Actions','?')} | RunAs: {t.get('RunAs','?')}")
 
     subsection("Third-Party Services")
@@ -472,12 +482,14 @@ def analyze_windows(snap):
     section("Users & Sessions", "T1087")
     subsection("Local Users")
     for u in (snap.get("Users") or []):
+        if not isinstance(u, dict): continue
         en = u.get("Enabled")
         if en in (True, "True"):
             detail(f"{u.get('Name')}: {GREEN('Enabled')} | PwSet: {u.get('PasswordLastSet')}")
 
     subsection("Logged-On Users")
     for u in (snap.get("LoggedOnUsers") or []):
+        if not isinstance(u, dict): continue
         detail(f"{u.get('UserName')} | {u.get('SessionName')} | {u.get('State')} | {u.get('LogonTime')}")
 
     subsection("WinRM/SSH Sessions")
@@ -485,6 +497,7 @@ def analyze_windows(snap):
         if isinstance(s, dict):
             detail(f"WinRM: {s.get('Owner')} from {s.get('ClientIP')}")
     for s in (snap.get("SSHSessions") or []):
+        if not isinstance(s, dict): continue
         detail(f"SSH: {s.get('UserName')} from {s.get('RemoteAddress')}")
 
     if snap.get("IsDomainController"):
@@ -499,6 +512,7 @@ def analyze_windows(snap):
     section("Applications & Software", "T1518")
     subsection(".NET Versions (AMSI bypass risk)")
     for v in (snap.get("DotNetVersions") or []):
+        if not isinstance(v, dict): continue
         ver = v.get("Version", "")
         if ver.startswith(("2.", "3.0", "3.5")):
             warn(f".NET {v.get('PSChildName')} v{ver} -- no AMSI")
@@ -545,6 +559,7 @@ def analyze_windows(snap):
     subsection("PowerShell History (credential leaks)")
     pw_pat = re.compile(r"(password|passwd|secret|token|apikey|convertto-securestring)", re.I)
     for h in (snap.get("PSHistory") or []):
+        if not isinstance(h, dict): continue
         flagged = [l for l in (h.get("Lines") or []) if pw_pat.search(str(l))]
         if flagged:
             warn(f"User '{h.get('User')}': {len(flagged)} sensitive history lines")
@@ -624,6 +639,7 @@ def analyze_linux(snap):
     section("Users & Authentication", "T1087")
     subsection("Interactive Users")
     for u in (snap.get("Users") or []):
+        if not isinstance(u, dict): continue
         if u.get("InteractiveLogin"):
             flag = RED if u.get("UID") == 0 and u.get("Name") != "root" else lambda x: x
             status = u.get("PasswordStatus", "")
@@ -694,6 +710,7 @@ def analyze_linux(snap):
 
     subsection("Cron Script Permissions")
     for s in (snap.get("CronScriptPermissions") or []):
+        if not isinstance(s, dict): continue
         mode = s.get("Mode", "")
         if mode:
             try:
@@ -722,6 +739,7 @@ def analyze_linux(snap):
                  "responder", "gobuster", "nikto", "wfuzz", "ffuf"}
     compilers = {"gcc", "g++", "gdb", "make"}
     for t in (snap.get("AttackTools") or []):
+        if not isinstance(t, dict): continue
         name = t.get("Name", "")
         if name in offensive:
             bad(f"Offensive tool: {name} at {t.get('Path')}")
@@ -734,12 +752,14 @@ def analyze_linux(snap):
     dangerous = {"nmap", "vim", "find", "bash", "sh", "python", "python3", "perl",
                  "php", "env", "awk", "less", "dd", "docker", "pkexec", "systemctl"}
     for b in (snap.get("SetuidBinaries") or []):
+        if not isinstance(b, dict): continue
         if os.path.basename(b.get("Path", "")) in dangerous:
             bad(f"Dangerous SUID: {b.get('Path')}")
 
     subsection("File Capabilities")
     dangerous_caps = ["cap_setuid", "cap_sys_admin", "cap_dac_override", "cap_sys_ptrace"]
     for c in (snap.get("FileCapabilities") or []):
+        if not isinstance(c, dict): continue
         for dc in dangerous_caps:
             if dc in str(c.get("Capabilities", "")).lower():
                 bad(f"{c.get('Path')}: {RED(c.get('Capabilities'))}")
@@ -747,6 +767,7 @@ def analyze_linux(snap):
 
     subsection("Writable Critical Paths")
     for p in (snap.get("WritableCriticalPaths") or []):
+        if not isinstance(p, dict): continue
         pt = p.get("Type", "")
         if pt == "etc_passwd":
             crit("/etc/passwd is WRITABLE!")
@@ -759,6 +780,7 @@ def analyze_linux(snap):
 
     subsection("Process Binary Permissions")
     for p in (snap.get("ProcessBinaryPermissions") or []):
+        if not isinstance(p, dict): continue
         mode = p.get("Mode", "")
         try:
             if int(mode, 8) & 0o002:
@@ -768,6 +790,7 @@ def analyze_linux(snap):
 
     subsection("Systemd Unit Permissions")
     for s in (snap.get("SystemdUnitPermissions") or []):
+        if not isinstance(s, dict): continue
         mode = s.get("Mode", "")
         try:
             if int(mode, 8) & 0o002:
@@ -794,6 +817,7 @@ def analyze_linux(snap):
 
     subsection("Hosts File (custom)")
     for h in (snap.get("HostsFile") or []):
+        if not isinstance(h, dict): continue
         ip = h.get("IPAddress", "")
         if ip not in ("127.0.0.1", "::1"):
             detail(f"{ip} -> {', '.join(h.get('Hostnames', []))}")
@@ -804,12 +828,14 @@ def analyze_linux(snap):
     if ci.get("inside_container"):
         warn(f"Inside a {ci.get('container_type', '?')} container")
     for s in (ci.get("docker_sockets") or []):
+        if not isinstance(s, dict): continue
         if s.get("Writable"):
             crit(f"Writable Docker socket: {s.get('Path')}")
     ce = snap.get("CloudEnvironment") or {}
     if ce.get("provider"):
         info(f"Cloud: {ce['provider']}")
     for c in (ce.get("credential_files") or []):
+        if not isinstance(c, dict): continue
         bad(f"Cloud creds: {c.get('Path')}")
 
     # ---- Credential Exposure ----
@@ -817,6 +843,7 @@ def analyze_linux(snap):
     subsection("Shell History")
     pw_pat = re.compile(r"(password|passwd|secret|token|mysql.*-p|curl.*-u)", re.I)
     for h in (snap.get("ShellHistory") or []):
+        if not isinstance(h, dict): continue
         flagged = [l for l in (h.get("Last200") or []) if pw_pat.search(str(l))]
         if flagged:
             warn(f"User '{h.get('User')}': {len(flagged)} sensitive lines")
@@ -830,11 +857,13 @@ def analyze_linux(snap):
 
     subsection("Interesting Hidden Files")
     for f in (snap.get("InterestingHiddenFiles") or [])[:10]:
+        if not isinstance(f, dict): continue
         warn(f"{f.get('Path')} ({f.get('Size', '?')} bytes)")
 
     subsection("Kerberos")
     kc = snap.get("KerberosConfig") or {}
     for k in (kc.get("keytab_files") or []):
+        if not isinstance(k, dict): continue
         bad(f"Keytab: {k.get('Path')}")
     for c in (kc.get("ad_hash_caches") or []):
         bad(f"AD cache: {c}")
@@ -857,6 +886,7 @@ def analyze_linux(snap):
     section("Miscellaneous", "T1082")
     subsection("fstab Mount Options")
     for entry in (snap.get("Fstab") or []):
+        if not isinstance(entry, dict): continue
         mp = entry.get("MountPoint", "")
         opts = entry.get("Options", "")
         if mp in ("/tmp", "/var/tmp", "/dev/shm"):
@@ -888,7 +918,7 @@ def analyze_linux(snap):
 # ============================================================================
 def analyze_snapshot(filepath):
     try:
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        with open(filepath, "r", encoding="utf-8-sig", errors="replace") as f:
             snap = json.load(f)
     except Exception as e:
         print(RED(f"Error loading {filepath}: {e}"))
