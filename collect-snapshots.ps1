@@ -52,20 +52,38 @@ $autorunscScriptBlock = {
         }
     } elseif ($authType -in @('ssh-password', 'ssh-key', 'ssh-powershell')) {
         # Use SSH-based PSRemoting (PowerShell 7+) - no WinRM/Kerberos needed
-        # Note: SSHHost parameter set does NOT support -Credential.
-        # Password auth will prompt interactively via SSH. For non-interactive,
-        # use ssh-key auth or configure ssh-agent.
         write-host "  Using PowerShell over SSH"
         $sshParams = @{
             HostName    = $targetHost
             UserName    = $creds.UserName
+            Options     = @{ StrictHostKeyChecking = 'accept-new' }
             ErrorAction = 'Stop'
         }
+
+        # For password-based SSH auth, use SSH_ASKPASS to pass credentials non-interactively
+        $askPassFile = $null
+        if ($authType -in @('ssh-password', 'ssh-powershell') -and $creds -is [PSCredential]) {
+            $askPassFile = Join-Path $env:TEMP "ssh_askpass_$([guid]::NewGuid().ToString('N')).cmd"
+            $plainPw = $creds.GetNetworkCredential().Password
+            Set-Content -Path $askPassFile -Value "@echo off`necho $plainPw" -Force -NoNewline:$false
+            $env:SSH_ASKPASS = $askPassFile
+            $env:SSH_ASKPASS_REQUIRE = 'force'
+            $env:DISPLAY = 'localhost:0'
+        }
+
         if ($authType -eq 'ssh-key' -or ($creds -is [hashtable] -and $creds.KeyFile)) {
             $keyFile = if ($creds -is [hashtable]) { $creds.KeyFile } else { $null }
             if ($keyFile) { $sshParams['KeyFilePath'] = $keyFile }
         }
-        $session = New-PSSession @sshParams
+        try {
+            $session = New-PSSession @sshParams
+        } finally {
+            # Clean up askpass file and env vars
+            if ($askPassFile -and (Test-Path $askPassFile)) { Remove-Item $askPassFile -Force -ErrorAction SilentlyContinue }
+            Remove-Item Env:\SSH_ASKPASS -ErrorAction SilentlyContinue
+            Remove-Item Env:\SSH_ASKPASS_REQUIRE -ErrorAction SilentlyContinue
+            Remove-Item Env:\DISPLAY -ErrorAction SilentlyContinue
+        }
         if (!$session) {
             Write-Error "Failed to create SSH session to $targetHost`n"
             exit
@@ -1612,73 +1630,6 @@ $ReadFromFileScriptBlock = {
     $json
 }
 
-# Start a job for each target host
-$targetHostsCount = $targetHosts.Count
-$localResults = @{}  # hostname → result for locally-run hosts
-for ($i = 0; $i -lt $targetHostsCount; $i++) {
-    $targetHost = $targetHosts[$i]
-    $hostCred = $hostCredentials[$targetHost]
-    $hostAuthType = $hostAuthTypes[$targetHost]
-    write-host "running script on host: $targetHost"
-
-    # Check if this is the local machine — run synchronously
-    $localNames = @('localhost', '127.0.0.1', '::1', '.', $env:COMPUTERNAME, "$env:COMPUTERNAME.$env:USERDNSDOMAIN")
-    try { $localNames += [System.Net.Dns]::GetHostName() } catch {}
-    $isLocalHost = $targetHost -in $localNames
-
-    # SSH-based Windows hosts must also run synchronously (can't do SSH in Start-Job)
-    $isSshWindows = $hostAuthType -in @('ssh-password', 'ssh-key', 'ssh-powershell')
-
-    if ($isLocalHost) {
-        Write-Host "  Detected localhost -- running collection directly (no PSRemoting)" -ForegroundColor Cyan
-        try {
-            $result = & $autorunscScriptBlock $targetHost $hostCred $hostAuthType
-            $localResults[$targetHost] = $result
-            Write-Host "  localhost collection complete" -ForegroundColor Green
-        } catch {
-            Write-Host "  localhost collection FAILED: $($_.Exception.Message)" -ForegroundColor Red
-            $localResults[$targetHost] = $null
-        }
-        Write-Progress -Activity "Processing target hosts" -Status "$($i+1) of $targetHostsCount completed" -PercentComplete ((($i+1) / $targetHostsCount) * 100)
-        continue
-    }
-
-    if ($isSshWindows) {
-        Write-Host "  Using PowerShell over SSH (synchronous)" -ForegroundColor Cyan
-        try {
-            $result = & $autorunscScriptBlock $targetHost $hostCred $hostAuthType
-            $localResults[$targetHost] = $result
-            Write-Host "  SSH collection complete" -ForegroundColor Green
-        } catch {
-            Write-Host "  SSH collection FAILED: $($_.Exception.Message)" -ForegroundColor Red
-            $localResults[$targetHost] = $null
-            $credName = ($inventoryEntries | Where-Object { $_.HostName -eq $targetHost } | Select-Object -First 1).CredentialName
-            if ($credName) { Set-CredentialFailed -HostName $targetHost -CredentialName $credName }
-        }
-        Write-Progress -Activity "Processing target hosts" -Status "$($i+1) of $targetHostsCount completed" -PercentComplete ((($i+1) / $targetHostsCount) * 100)
-        continue
-    }
-
-    # Remote host — use Start-Job for parallel execution
-    # If there are 10 or more running jobs, wait for one to finish
-    while (($jobs | Where-Object { $_.State -eq 'Running' }).Count -ge $maxConcurrentJobs) {
-        # Wait for any job to finish
-        $finishedJob = Get-Job | Wait-Job -Any
-        # Remove the finished job from the jobs array
-        $jobs = $jobs | Where-Object { $_.Id -ne $finishedJob.Id }
-    }
-    # Start a new job with per-host credentials
-    $job = Start-Job -ScriptBlock $autorunscScriptBlock -ArgumentList @($targetHost, $hostCred, $hostAuthType)
-    $jobs += $job
-    $jobHostMap[$job.Id] = $targetHost
-    #$jobs += Start-Job -ScriptBlock $ReadFromFileScriptBlock -ArgumentList @($targetHost)
-
-    # Update the progress bar
-    Write-Progress -Activity "Processing target hosts" -Status "$($i+1) of $targetHostsCount completed" -PercentComplete ((($i+1) / $targetHostsCount) * 100)
-}
-if ($jobs.Count -gt 0) { $jobs | Wait-Job }
-$failedHosts = @()
-
 # Helper: serialize snapshot to JSON field-by-field to avoid ConvertTo-Json OOM on large objects
 function Save-SnapshotJson {
     param($Result, [string]$FilePath)
@@ -1719,6 +1670,84 @@ function Save-CompressedSnapshot {
         Write-Host "  Compression failed: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 }
+
+# Start a job for each target host
+$targetHostsCount = $targetHosts.Count
+$localResults = @{}  # hostname → result for locally-run hosts
+for ($i = 0; $i -lt $targetHostsCount; $i++) {
+    $targetHost = $targetHosts[$i]
+    $hostCred = $hostCredentials[$targetHost]
+    $hostAuthType = $hostAuthTypes[$targetHost]
+    write-host "running script on host: $targetHost"
+
+    # Check if this is the local machine — run synchronously
+    $localNames = @('localhost', '127.0.0.1', '::1', '.', $env:COMPUTERNAME, "$env:COMPUTERNAME.$env:USERDNSDOMAIN")
+    try { $localNames += [System.Net.Dns]::GetHostName() } catch {}
+    $isLocalHost = $targetHost -in $localNames
+
+    # SSH-based Windows hosts must also run synchronously (can't do SSH in Start-Job)
+    $isSshWindows = $hostAuthType -in @('ssh-password', 'ssh-key', 'ssh-powershell')
+
+    if ($isLocalHost) {
+        Write-Host "  Detected localhost -- running collection directly (no PSRemoting)" -ForegroundColor Cyan
+        try {
+            $result = & $autorunscScriptBlock $targetHost $hostCred $hostAuthType
+            $localResults[$targetHost] = $result
+            Write-Host "  localhost collection complete" -ForegroundColor Green
+        } catch {
+            Write-Host "  localhost collection FAILED: $($_.Exception.Message)" -ForegroundColor Red
+            $localResults[$targetHost] = $null
+        }
+        Write-Progress -Activity "Processing target hosts" -Status "$($i+1) of $targetHostsCount completed" -PercentComplete ((($i+1) / $targetHostsCount) * 100)
+        continue
+    }
+
+    if ($isSshWindows) {
+        Write-Host "  Using SSH collector (synchronous)" -ForegroundColor Cyan
+        $sshWinCollector = Join-Path $PSScriptRoot 'ssh-collect-windows.py'
+        $winCollectorScript = Join-Path $PSScriptRoot 'windows-collector.ps1'
+        $outputFile = Join-Path (Get-Location) "system-info_$($targetHost).json"
+        # Get password from credential
+        $sshUser = $hostCred.UserName
+        $sshPass = $hostCred.GetNetworkCredential().Password
+        try {
+            $result = & python $sshWinCollector $targetHost $sshUser $sshPass $winCollectorScript $outputFile 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  SSH collection complete" -ForegroundColor Green
+                Save-CompressedSnapshot -HostName $targetHost -JsonPath $outputFile
+            } else {
+                Write-Host "  SSH collection FAILED: $result" -ForegroundColor Red
+                $credName = ($inventoryEntries | Where-Object { $_.HostName -eq $targetHost } | Select-Object -First 1).CredentialName
+                if ($credName) { Set-CredentialFailed -HostName $targetHost -CredentialName $credName }
+            }
+        } catch {
+            Write-Host "  SSH collection FAILED: $($_.Exception.Message)" -ForegroundColor Red
+            $credName = ($inventoryEntries | Where-Object { $_.HostName -eq $targetHost } | Select-Object -First 1).CredentialName
+            if ($credName) { Set-CredentialFailed -HostName $targetHost -CredentialName $credName }
+        }
+        Write-Progress -Activity "Processing target hosts" -Status "$($i+1) of $targetHostsCount completed" -PercentComplete ((($i+1) / $targetHostsCount) * 100)
+        continue
+    }
+
+    # Remote host — use Start-Job for parallel execution
+    # If there are 10 or more running jobs, wait for one to finish
+    while (($jobs | Where-Object { $_.State -eq 'Running' }).Count -ge $maxConcurrentJobs) {
+        # Wait for any job to finish
+        $finishedJob = Get-Job | Wait-Job -Any
+        # Remove the finished job from the jobs array
+        $jobs = $jobs | Where-Object { $_.Id -ne $finishedJob.Id }
+    }
+    # Start a new job with per-host credentials
+    $job = Start-Job -ScriptBlock $autorunscScriptBlock -ArgumentList @($targetHost, $hostCred, $hostAuthType)
+    $jobs += $job
+    $jobHostMap[$job.Id] = $targetHost
+    #$jobs += Start-Job -ScriptBlock $ReadFromFileScriptBlock -ArgumentList @($targetHost)
+
+    # Update the progress bar
+    Write-Progress -Activity "Processing target hosts" -Status "$($i+1) of $targetHostsCount completed" -PercentComplete ((($i+1) / $targetHostsCount) * 100)
+}
+if ($jobs.Count -gt 0) { $jobs | Wait-Job }
+$failedHosts = @()
 
 # Process local results first
 foreach ($hostName in $localResults.Keys) {

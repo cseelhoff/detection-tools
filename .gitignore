@@ -3,4 +3,7 @@
 __pycache__/
 age-key.txt
 inventory.yml
-file-inventory_CPT-HOFF.csv
+*.csv
+*.zip
+*.err
+

@@ -665,7 +665,11 @@ def get_persistence():
     for cron_dir in ["/var/spool/cron/crontabs", "/var/spool/cron"]:
         if not os.path.isdir(cron_dir):
             continue
-        for entry in os.listdir(cron_dir):
+        try:
+            entries = os.listdir(cron_dir)
+        except PermissionError:
+            continue
+        for entry in entries:
             cron_path = os.path.join(cron_dir, entry)
             if not os.path.isfile(cron_path):
                 continue

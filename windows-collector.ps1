@@ -1400,7 +1400,7 @@ try {
     }
 } catch {}
 
-$dateTimeFinished = Get-Date
+$dateTimeFinished = (Get-Date).ToString('o')
 [PSCustomObject]@{
     SystemUUID = $systemUUID
     SnapshotTime = $dateTimeFinished
@@ -1487,6 +1487,7 @@ $dateTimeFinished = Get-Date
     NamedPipeAcls = $namedPipeAcls
     ShareAcls = $shareAcls
     HomeDirAcls = $homeDirAcls
+}
 }
 
 # ---- Save JSON output ----
