@@ -33,7 +33,7 @@ function TableDefinitionToSql($tableName, $columns, $primaryKeys = $null, $forei
             $columns = [string]::Join(", ", $foreignKey["ForeignKeys"])
             $refTable = $foreignKey["Table"]
             $refColumns = [string]::Join(", ", $foreignKey["References"])
-            $sql += "`n    FOREIGN KEY ($columns) REFERENCES $refTable($refColumns),"
+            $sql += "`n    FOREIGN KEY ($columns) REFERENCES $refTable($refColumns) ON DELETE CASCADE,"
         }
         $sql = $sql.TrimEnd(",")
     }
@@ -714,7 +714,7 @@ foreach ($targetHost in $targetHosts) {
             $createCmd.CommandText = @"
 CREATE TABLE IF NOT EXISTS public.fileinventory (
     id BIGSERIAL PRIMARY KEY,
-    snapshotid INTEGER REFERENCES public.systemsnapshots(snapshotid),
+    snapshotid INTEGER REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE,
     fullpath TEXT,
     filename VARCHAR(512),
     fileattributes INTEGER,
@@ -792,7 +792,7 @@ CREATE TABLE IF NOT EXISTS public.fileinventory (
             $createCmd.CommandText = @"
 CREATE TABLE IF NOT EXISTS public.fileinventory (
     id BIGSERIAL PRIMARY KEY,
-    snapshotid INTEGER REFERENCES public.systemsnapshots(snapshotid),
+    snapshotid INTEGER REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE,
     fullpath TEXT,
     filename VARCHAR(512),
     fileattributes INTEGER,

@@ -1056,10 +1056,19 @@ def get_file_inventory():
 def get_sudoers():
     entries = []
 
-    for sudoers_file in ["/etc/sudoers"] + glob.glob("/etc/sudoers.d/*"):
-        if not os.path.isfile(sudoers_file):
-            continue
+    # List sudoers.d files — may need sudo if directory isn't readable
+    sudoers_d_files = glob.glob("/etc/sudoers.d/*")
+    if not sudoers_d_files and os.path.isdir("/etc/sudoers.d"):
+        ls_output = run_sudo("ls /etc/sudoers.d")
+        if ls_output:
+            sudoers_d_files = [f"/etc/sudoers.d/{f}" for f in ls_output.splitlines() if f.strip()]
+
+    for sudoers_file in ["/etc/sudoers"] + sudoers_d_files:
         content = read_file_contents(sudoers_file)
+        if not content:
+            content = run_sudo(f"cat {sudoers_file}")
+        if not content:
+            continue
         for line in content.splitlines():
             line = line.strip()
             if line and not line.startswith("#") and not line.startswith("Defaults"):

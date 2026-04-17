@@ -42,7 +42,7 @@ CREATE TABLE public.arpcache (
 	linklayeraddress varchar(255) NULL,
 	state varchar(255) NULL,
 	CONSTRAINT arpcache_pkey PRIMARY KEY (id),
-	CONSTRAINT arpcache_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT arpcache_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -73,7 +73,7 @@ CREATE TABLE public.autorunsc (
 	imp varchar(255) NULL,
 	unique_autorunsc_id int4 NULL,
 	CONSTRAINT autorunsc_pkey PRIMARY KEY (id),
-	CONSTRAINT autorunsc_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT autorunsc_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 CREATE INDEX idx_snap ON public.autorunsc USING btree (snapshotid);
 
@@ -100,7 +100,7 @@ CREATE TABLE public.computerinfo (
 	ossystemdrive varchar(255) NULL,
 	oslastbootuptime timestamp NULL,
 	CONSTRAINT computerinfo_pkey PRIMARY KEY (id),
-	CONSTRAINT computerinfo_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT computerinfo_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -120,7 +120,7 @@ CREATE TABLE public.diskvolumes (
 	filesystemlabel varchar(255) NULL,
 	filesystem varchar(255) NULL,
 	CONSTRAINT diskvolumes_pkey PRIMARY KEY (id),
-	CONSTRAINT diskvolumes_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT diskvolumes_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -136,7 +136,7 @@ CREATE TABLE public.dnssearchsuffixes (
 	interfaceindex int4 NULL,
 	suffixsearch varchar(255) NULL,
 	CONSTRAINT dnssearchsuffixes_pkey PRIMARY KEY (id),
-	CONSTRAINT dnssearchsuffixes_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT dnssearchsuffixes_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -152,7 +152,7 @@ CREATE TABLE public.dnsservers (
 	interfaceindex int4 NULL,
 	serveraddress varchar(255) NULL,
 	CONSTRAINT dnsservers_pkey PRIMARY KEY (id),
-	CONSTRAINT dnsservers_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT dnsservers_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -168,7 +168,7 @@ CREATE TABLE public."groups" (
 	"name" varchar(255) NULL,
 	sid varchar(255) NULL,
 	CONSTRAINT groups_pkey PRIMARY KEY (id),
-	CONSTRAINT groups_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT groups_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -189,7 +189,7 @@ CREATE TABLE public.ipaddresses (
 	skipassource bool NULL,
 	validlifetimeticks int8 NULL,
 	CONSTRAINT ipaddresses_pkey PRIMARY KEY (id),
-	CONSTRAINT ipaddresses_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT ipaddresses_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -205,7 +205,7 @@ CREATE TABLE public.members (
 	usersid varchar(255) NULL,
 	groupsid varchar(255) NULL,
 	CONSTRAINT members_pkey PRIMARY KEY (id),
-	CONSTRAINT members_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT members_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -227,7 +227,7 @@ CREATE TABLE public.netadapters (
 	connectionspecificsuffix varchar(255) NULL,
 	registerthisconnectionsaddress bool NULL,
 	CONSTRAINT netadapters_pkey PRIMARY KEY (id),
-	CONSTRAINT netadapters_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT netadapters_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -248,7 +248,7 @@ CREATE TABLE public.processes (
 	commandline varchar(2048) NULL,
 	executablepath varchar(255) NULL,
 	CONSTRAINT processes_pkey PRIMARY KEY (id),
-	CONSTRAINT processes_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT processes_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 CREATE INDEX idx_snapshotid_process ON public.processes USING btree (snapshotid, processname);
 
@@ -267,7 +267,7 @@ CREATE TABLE public.routes (
 	nexthop varchar(255) NULL,
 	routemetric int4 NULL,
 	CONSTRAINT routes_pkey PRIMARY KEY (id),
-	CONSTRAINT routes_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT routes_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -284,7 +284,7 @@ CREATE TABLE public.shares (
 	"path" varchar(255) NULL,
 	scopename varchar(255) NULL,
 	CONSTRAINT shares_pkey PRIMARY KEY (id),
-	CONSTRAINT shares_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT shares_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -305,7 +305,7 @@ CREATE TABLE public.tcpconnections (
 	creationtime timestamp NULL,
 	state varchar(255) NULL,
 	CONSTRAINT tcpconnections_pkey PRIMARY KEY (id),
-	CONSTRAINT tcpconnections_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT tcpconnections_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -325,7 +325,7 @@ CREATE TABLE public.udpconnections (
 	owningprocess int4 NULL,
 	creationtime timestamp NULL,
 	CONSTRAINT udpconnections_pkey PRIMARY KEY (id),
-	CONSTRAINT udpconnections_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT udpconnections_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -341,7 +341,7 @@ CREATE TABLE public.userexecutables (
 	fullname varchar(2048) NULL,
 	length int4 NULL,
 	CONSTRAINT userexecutables_pkey PRIMARY KEY (id),
-	CONSTRAINT userexecutables_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT userexecutables_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
 
 
@@ -361,5 +361,5 @@ CREATE TABLE public.users (
 	principalsource varchar(255) NULL,
 	sid varchar(255) NULL,
 	CONSTRAINT users_pkey PRIMARY KEY (id),
-	CONSTRAINT users_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid)
+	CONSTRAINT users_snapshotid_fkey FOREIGN KEY (snapshotid) REFERENCES public.systemsnapshots(snapshotid) ON DELETE CASCADE
 );
