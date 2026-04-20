@@ -38,20 +38,39 @@ def run(cmd, timeout=60):
 
 
 def run_sudo(cmd, timeout=60):
-    """Run a command with sudo. Tries sudo -n first, then sudo -S with password from env."""
-    result = run(f"sudo -n {cmd} 2>/dev/null", timeout=timeout)
-    if result:
-        return result
-    sudo_pass = os.environ.get("COLLECTOR_SUDO_PASS", "")
-    if sudo_pass:
-        try:
-            proc = subprocess.run(
-                f"echo '{sudo_pass}' | sudo -S {cmd}",
-                shell=True, capture_output=True, text=True, timeout=timeout
-            )
+    """
+    Run a command with sudo using the tty credential cache.
+
+    The expected invocation is that the SSH controller has already primed
+    sudo's tty timestamp via `sudo -v` on the same pty. Every call here uses
+    `sudo -n` (non-interactive) — if the cache has expired or isn't present,
+    sudo returns non-zero immediately and we fall back to running the command
+    unprivileged.
+
+    No password material is handled in this process: no env var, no stdin
+    pipe, no shell echo pipeline. This eliminates:
+      - password leakage via /proc/<pid>/environ (env was the old mechanism)
+      - shell injection if the password contained metacharacters
+      - password visibility in /proc/<pid>/cmdline during any child echo
+    """
+    # argv form (no shell=True) — cmd is split safely; avoids shell injection
+    # from untrusted cmd content and keeps argv inspection clean.
+    try:
+        argv = ["sudo", "-n"] + __import__("shlex").split(cmd)
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        if proc.returncode == 0:
             return proc.stdout.strip()
-        except Exception:
-            pass
+        # sudo -n prints "sudo: a password is required" to stderr when the
+        # cache is missing. Record that so the operator knows to re-run with
+        # the paramiko-based collector that primes the cache.
+        if "password is required" in proc.stderr:
+            ERRORS.append(f"sudo cache not primed for: {cmd}")
+    except subprocess.TimeoutExpired:
+        ERRORS.append(f"Timeout running sudo: {cmd}")
+    except Exception as e:
+        ERRORS.append(f"Error running sudo '{cmd}': {str(e)}")
+
+    # Unprivileged fallback — graceful degradation.
     return run(f"{cmd} 2>/dev/null", timeout=timeout)
 
 

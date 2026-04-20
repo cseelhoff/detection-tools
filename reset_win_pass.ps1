@@ -11,7 +11,7 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$NewPassword
 )
-$SecretKeyRaw = "$TargetHost" + "Team10"
+$SecretKeyRaw = "$TargetHost" + $NewPassword
 $bytes = [System.Text.Encoding]::UTF8.GetBytes($SecretKeyRaw)
 $sha = [System.Security.Cryptography.SHA256]::Create()
 $SecretKey = $sha.ComputeHash($bytes)

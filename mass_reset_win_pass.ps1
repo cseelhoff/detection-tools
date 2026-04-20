@@ -92,7 +92,7 @@ $resultsResponse = Invoke-RestMethod -Uri $resultsUri -Method Get -Headers $head
 $logText = $resultsResponse.data.result_sets.rows.data.text | Where-Object { $_ -match '^\d{3}\|' }
 $users = $logText |
     ForEach-Object { ($_ -split '\|', 2)[1] } |
-    Where-Object { $_ -notmatch '^\d{4}-\d{2}-\d{2}T' -and $_ -notmatch '^(Action |Package |Downloading|Running|Process Group|Command Line|Completed)' }
+    Where-Object { $_ -match '^[A-Za-z][A-Za-z0-9_-]{0,19}$' }
 
 foreach ($u in $users) {
     $u = $u.ToUpper()
