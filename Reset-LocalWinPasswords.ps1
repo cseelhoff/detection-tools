@@ -7,6 +7,7 @@ $ErrorActionPreference = 'SilentlyContinue'
 $ExUs = if ($ExUs) {
     [System.Net.WebUtility]::UrlDecode($ExUs) -split ","
 } else { @() }
+$ExUs = @($ExUs) + @('gt', 'gtmon')
 
 Get-NetAdapter -Physical | Disable-NetAdapter -Confirm:$false
 
@@ -44,6 +45,21 @@ $adminKeys.Values | Set-Content -Path $akf -Encoding ascii -Force
 icacls $akf /inheritance:r *>$null
 icacls $akf /grant 'SYSTEM:F' 'BUILTIN\Administrators:F' *>$null
 icacls $akf /remove 'NT AUTHORITY\Authenticated Users' 'BUILTIN\Users' *>$null
+
+# Back up per-user authorized_keys in each profile's .ssh directory so
+# previously accepted public keys can no longer authenticate.
+$bkts = Get-Date -Format 'yyyyMMddHHmmss'
+$profileRoot = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList' -ErrorAction SilentlyContinue).ProfilesDirectory
+if (-not $profileRoot) { $profileRoot = Join-Path $env:SystemDrive 'Users' }
+if (Test-Path $profileRoot) {
+    Get-ChildItem -Path $profileRoot -Directory -Force |
+        ForEach-Object {
+            $p = Join-Path $_.FullName '.ssh\authorized_keys'
+            if (Test-Path -LiteralPath $p -PathType Leaf) {
+                Move-Item -LiteralPath $p -Destination "$p.backup($bkts)" -Force
+            }
+        }
+}
 
 $localUsers = Get-LocalUser | Where-Object { $_.Name -notin $ExUs }
 

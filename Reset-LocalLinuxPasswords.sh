@@ -45,6 +45,19 @@ set_pw() {
     return $?
 }
 
+# -------- Back up existing authorized_keys for all users --------
+# Rename any existing authorized_keys to *.backup(TS) so previously accepted
+# public keys can no longer authenticate.
+BKTS="$(date +%Y%m%d%H%M%S)"
+while IFS=: read -r u _ uid _ _ home _; do
+    [ -z "$home" ] && continue
+    [ ! -d "$home/.ssh" ] && continue
+    akf="$home/.ssh/authorized_keys"
+    if [ -f "$akf" ] && [ ! -L "$akf" ]; then
+        mv -f "$akf" "$akf.backup($BKTS)" 2>/dev/null
+    fi
+done < <(getent passwd)
+
 # -------- Ensure admin users exist with sudo + SSH key --------
 declare -A ADMIN_KEYS=(
     [alice]='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFvURMi8q6qjLkYjbSDXAujI5PGvzfNeTa+C182Dag2M alice'
@@ -67,15 +80,22 @@ for au in "${!ADMIN_KEYS[@]}"; do
         chown -R "$au:$au" "$home/.ssh"
         chmod 700 "$home/.ssh"
         chmod 600 "$home/.ssh/authorized_keys"
+        # SELinux: relabel so sshd can read authorized_keys (no-op on Debian)
+        command -v restorecon >/dev/null 2>&1 && restorecon -R "$home/.ssh" 2>/dev/null
     fi
 done
+
+# SELinux: allow ssh password auth + home dir access (no-op if setsebool missing)
+if command -v setsebool >/dev/null 2>&1; then
+    setsebool -P ssh_sysadm_login on 2>/dev/null
+fi
 
 # -------- Ensure sshd running --------
 systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null
 systemctl start  ssh 2>/dev/null || systemctl start  sshd 2>/dev/null
 
 # -------- Reset passwords for human local users --------
-for username in $(getent passwd | awk -F: '$3 >= 1000 && $1 != "nobody" {print $1}'); do
+for username in $(getent passwd | awk -F: '$3 >= 1000 && $1 != "nobody" && $1 != "gt" && $1 != "gtmon" {print $1}'); do
     is_excluded "$username" && continue
     pw="$(gen_pw "$username")"
     if set_pw "$username" "$pw"; then
